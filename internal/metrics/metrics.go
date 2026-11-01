@@ -10,6 +10,7 @@ package metrics
 import (
 	"math"
 	"sort"
+	"time"
 )
 
 // Bar is the OHLCV subset the metrics need.
@@ -377,4 +378,53 @@ func FundingAPR(rate float64, intervalMs int64) float64 {
 	}
 	perDay := float64(24*3600*1000) / float64(intervalMs)
 	return rate * perDay * 365
+}
+
+// SMA is the simple moving average of the last n closes including the forming
+// bar (bars newest first). NaN with fewer than n bars.
+func SMA(bars []Bar, n int) float64 {
+	if n <= 0 || len(bars) < n {
+		return NaN
+	}
+	sum := 0.0
+	for i := 0; i < n; i++ {
+		sum += bars[i].C
+	}
+	return sum / float64(n)
+}
+
+// Distance is last / level − 1, NaN for a missing level.
+func Distance(last, level float64) float64 {
+	if last <= 0 || level <= 0 || math.IsNaN(level) {
+		return NaN
+	}
+	return last/level - 1
+}
+
+// OpenAt returns the open of the daily bar that starts at startMs (UTC day
+// boundary), NaN if that day is not in the series. daily newest first.
+func OpenAt(daily []Bar, startMs int64) float64 {
+	for _, b := range daily {
+		if b.TS == startMs {
+			return b.O
+		}
+		if b.TS < startMs {
+			break
+		}
+	}
+	return NaN
+}
+
+// PeriodStarts returns the UTC millisecond starts of the current day, the
+// current ISO week (Monday) and the current month for a moment t.
+func PeriodStarts(t time.Time) (day, week, month int64) {
+	u := t.UTC()
+	d := time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC)
+	wd := int(d.Weekday()) // Sunday = 0
+	if wd == 0 {
+		wd = 7
+	}
+	w := d.AddDate(0, 0, -(wd - 1))
+	m := time.Date(u.Year(), u.Month(), 1, 0, 0, 0, 0, time.UTC)
+	return d.UnixMilli(), w.UnixMilli(), m.UnixMilli()
 }

@@ -260,7 +260,15 @@ func (s *Store) OnRows(ts time.Time, rows []collector.Row) {
 			cf(r.ATR), cf(r.RV24), cf(r.Regime), cf(r.Range1d), cf(r.ToHigh), cf(r.ToLow),
 			cf(r.VsBtc["1h"]), cf(r.VsBtc["4h"]), cf(r.VsBtc["24h"]),
 			cf(r.Beta), cf(r.Alpha), cf(r.Presence), cf(r.Stay), cf(r.Corr),
-			cf(r.Depth01), cf(r.Depth05), cf(r.Depth1), cf(r.Imb), cf(r.Spread))
+			cf(r.Depth01), cf(r.Depth05), cf(r.Depth1), cf(r.Imb), cf(r.Spread),
+			cf(r.DO.Dist), cf(r.WO.Dist), cf(r.MO.Dist), cf(r.MA50.Dist), cf(r.MA100.Dist), cf(r.MA200.Dist))
+	}
+}
+
+// OnFlow implements collector.Sink.
+func (s *Store) OnFlow(minutes []collector.FlowMinute) {
+	for _, m := range minutes {
+		s.push("flow_1m", m.Minute, m.InstID, m.BuyQuote, m.SellQuote, uint32(m.Trades), uint32(m.BuyTrades))
 	}
 }
 

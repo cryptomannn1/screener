@@ -33,6 +33,9 @@ type Config struct {
 	Settle          []string      // settle currencies, default USDT, USDC
 	BenchmarkInstID string        // default BTC-USDT-SWAP
 	BooksTop        int           // sweep books only for the top N by vol24; 0 = all
+	Flow            bool          // use the WebSocket stream (tickers, mark, index, OI, funding, trades)
+	WSPerConn       int           // instruments per WebSocket connection, default 200
+	ComputeEvery    time.Duration // row recompute period with the stream on, default 1s
 }
 
 func (c Config) withDefaults() Config {
@@ -53,7 +56,7 @@ func (c Config) withDefaults() Config {
 		c.HourlyBackfill = 300
 	}
 	if c.DailyBackfill <= 0 {
-		c.DailyBackfill = 40
+		c.DailyBackfill = 230 // MA 200 needs 200 daily closes
 	}
 	if len(c.Settle) == 0 {
 		c.Settle = []string{"USDT", "USDC"}
@@ -61,6 +64,10 @@ func (c Config) withDefaults() Config {
 	if c.BenchmarkInstID == "" {
 		c.BenchmarkInstID = "BTC-USDT-SWAP"
 	}
+	if c.WSPerConn <= 0 {
+		c.WSPerConn = 200
+	}
+	def(&c.ComputeEvery, time.Second)
 	return c
 }
 
@@ -71,6 +78,7 @@ type Sink interface {
 	OnCandles(instID, bar string, candles []okx.Candle)
 	OnDepth(ts time.Time, instID string, d metrics.Depth)
 	OnRows(ts time.Time, rows []Row)
+	OnFlow(minutes []FlowMinute)
 }
 
 // Tick is the per-minute snapshot of the batch endpoints for one instrument.
@@ -97,7 +105,7 @@ type state struct {
 	inst              okx.Instrument
 	tk                okx.Ticker
 	mark              float64
-	index             float64
+	markTS            int64
 	oi                okx.OpenInterest
 	fund              okx.Funding
 	hourly            []metrics.Bar // newest first
@@ -116,25 +124,33 @@ type Collector struct {
 	log   *slog.Logger
 	sinks []Sink
 
+	flow      *Flow
+	stream    *okx.Stream // per-instrument channels
+	idxStream *okx.Stream // index-tickers, keyed by underlying (BTC-USDT)
+	ctVals    sync.Map    // instId → float64, read on the trade hot path
+
 	mu             sync.RWMutex
 	states         map[string]*state
+	index          map[string]float64 // underlying (BTC-USDT) → index price
 	rows           []Row
 	rowsAt         time.Time
 	health         Health
 	started        time.Time
 	lastRowsStored time.Time
-	lastTickStored time.Time
+	lastFlowMinute int64
 }
 
 // Health is the /health payload.
 type Health struct {
-	Universe  int             `json:"universe"`
-	Rows      int             `json:"rows"`
-	RowsAt    int64           `json:"rowsAt"`
-	UptimeSec int64           `json:"uptimeSec"`
-	Loops     map[string]Loop `json:"loops"`
-	Coverage  map[string]int  `json:"coverage"`
-	Benchmark string          `json:"benchmark"`
+	Universe    int             `json:"universe"`
+	Rows        int             `json:"rows"`
+	RowsAt      int64           `json:"rowsAt"`
+	UptimeSec   int64           `json:"uptimeSec"`
+	Loops       map[string]Loop `json:"loops"`
+	Coverage    map[string]int  `json:"coverage"`
+	Benchmark   string          `json:"benchmark"`
+	Stream      *okx.WSStats    `json:"stream,omitempty"`
+	IndexStream *okx.WSStats    `json:"indexStream,omitempty"`
 }
 
 // Loop is the state of one poll loop.
@@ -149,11 +165,77 @@ type Loop struct {
 
 // New builds a collector.
 func New(cli *okx.Client, cfg Config, log *slog.Logger, sinks ...Sink) *Collector {
-	return &Collector{
+	c := &Collector{
 		cli: cli, cfg: cfg.withDefaults(), log: log, sinks: sinks,
 		states:  map[string]*state{},
+		index:   map[string]float64{},
 		health:  Health{Loops: map[string]Loop{}, Coverage: map[string]int{}},
 		started: time.Now(),
+		flow:    NewFlow(),
+	}
+	if c.cfg.Flow {
+		c.stream = okx.NewStream(log, c.cfg.WSPerConn, []string{"tickers", "mark-price", "open-interest", "funding-rate", "trades"}, c.onEvent)
+		c.idxStream = okx.NewStream(log, 500, []string{"index-tickers"}, c.onEvent)
+	}
+	return c
+}
+
+// onEvent applies one WebSocket message. Trades go to the flow aggregator
+// (contracts → quote notional per fill); the other channels update the same
+// per-instrument state the REST polls fill, newest timestamp wins.
+func (c *Collector) onEvent(ev okx.WSEvent) {
+	if ev.Channel == "trades" {
+		for _, t := range ev.Trades {
+			ctVal := 1.0
+			if v, ok := c.ctVals.Load(t.InstID); ok {
+				ctVal = v.(float64)
+			}
+			c.flow.Add(t.InstID, t.TS, t.Side == "buy", t.Px*t.Sz*ctVal, t.Count)
+		}
+		return
+	}
+	now := time.Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, tk := range ev.Tickers {
+		if st := c.states[tk.InstID]; st != nil && tk.TS >= st.tk.TS {
+			st.tk = tk
+		}
+	}
+	for _, m := range ev.Marks {
+		if st := c.states[m.InstID]; st != nil && m.TS >= st.markTS {
+			st.mark, st.markTS = m.MarkPx, m.TS
+		}
+	}
+	for _, it := range ev.Index {
+		c.index[it.InstID] = it.IdxPx
+	}
+	for _, oi := range ev.OI {
+		if st := c.states[oi.InstID]; st != nil && oi.TS >= st.oi.TS {
+			c.applyOI(st, oi, now)
+		}
+	}
+	for _, fr := range ev.Funding {
+		if st := c.states[fr.InstID]; st != nil && fr.TS >= st.fund.TS {
+			st.fund = fr
+		}
+	}
+}
+
+// applyOI stores an OI observation and keeps one history point per minute.
+// Caller holds c.mu.
+func (c *Collector) applyOI(st *state, oi okx.OpenInterest, now time.Time) {
+	st.oi = oi
+	usd := oi.OIUsd
+	if usd <= 0 && st.tk.Last > 0 {
+		usd = oi.OICcy * st.tk.Last
+	}
+	if l := len(st.oiHist); l == 0 || now.UnixMilli()-st.oiHist[l-1].ts >= 60_000 {
+		st.oiHist = append(st.oiHist, oiPoint{ts: now.UnixMilli(), usd: usd})
+	}
+	cut := now.Add(-c.cfg.OIKeep).UnixMilli()
+	for len(st.oiHist) > 0 && st.oiHist[0].ts < cut {
+		st.oiHist = st.oiHist[1:]
 	}
 }
 
@@ -168,6 +250,19 @@ func (c *Collector) SeedOI(instID string, ts int64, usd float64) {
 	}
 	st.oiHist = append(st.oiHist, oiPoint{ts: ts, usd: usd})
 }
+
+// SeedCandles restores stored bars (newest first) before Run.
+func (c *Collector) SeedCandles(instID, bar string, cs []okx.Candle) {
+	c.mu.Lock()
+	if c.states[instID] == nil {
+		c.states[instID] = &state{inst: okx.Instrument{ID: instID}}
+	}
+	c.mu.Unlock()
+	c.mergeCandles(instID, bar, cs)
+}
+
+// Flow exposes the taker aggregator (seeding on restart).
+func (c *Collector) Flow() *Flow { return c.flow }
 
 // Run starts every loop and blocks until ctx ends.
 func (c *Collector) Run(ctx context.Context) error {
@@ -192,10 +287,34 @@ func (c *Collector) Run(ctx context.Context) error {
 			c.loop(ctx, name, every, fn)
 		}()
 	}
-	run("fast", c.cfg.FastEvery, c.pollFast)
+	c.syncStream(ctx)
+	// One-off: fill the OI history of instruments that have less than a day
+	// of it, so oiD 4h / 24h read within minutes of a cold start instead of
+	// after a day of accumulation.
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.backfillOI(ctx)
+	}()
+	fastEvery := c.cfg.FastEvery
+	if c.stream != nil {
+		// The stream carries price / mark / index live; REST becomes a
+		// safety net that fills anything the sockets missed.
+		if fastEvery < 30*time.Second {
+			fastEvery = 30 * time.Second
+		}
+		run("compute", c.cfg.ComputeEvery, func(context.Context) error { c.compute(time.Now()); return nil })
+	}
+	run("fast", fastEvery, c.pollFast)
 	run("oi", c.cfg.OIEvery, c.pollOI)
 	run("funding", c.cfg.FundingEvery, c.pollFunding)
-	run("universe", c.cfg.UniverseEvery, c.refreshUniverse)
+	run("universe", c.cfg.UniverseEvery, func(ctx context.Context) error {
+		err := c.refreshUniverse(ctx)
+		if err == nil {
+			c.syncStream(ctx)
+		}
+		return err
+	})
 	run("hourly", c.cfg.HourlyEvery, func(ctx context.Context) error { return c.sweepCandles(ctx, "1H") })
 	run("daily", c.cfg.DailyEvery, func(ctx context.Context) error { return c.sweepCandles(ctx, "1Dutc") })
 	run("books", c.cfg.BooksEvery, c.sweepBooks)
@@ -253,6 +372,98 @@ func (c *Collector) setItems(name string, n int) {
 	c.mu.Unlock()
 }
 
+// syncStream points the trade stream at the current universe.
+func (c *Collector) syncStream(ctx context.Context) {
+	if c.stream == nil {
+		return
+	}
+	c.mu.RLock()
+	ids := make([]string, 0, len(c.states))
+	ulySet := map[string]bool{}
+	for id, st := range c.states {
+		if st.inst.CtType != "" {
+			ids = append(ids, id)
+			if st.inst.Uly != "" {
+				ulySet[st.inst.Uly] = true
+			}
+		}
+	}
+	c.mu.RUnlock()
+	c.stream.Set(ctx, ids)
+	ulys := make([]string, 0, len(ulySet))
+	for u := range ulySet {
+		ulys = append(ulys, u)
+	}
+	c.idxStream.Set(ctx, ulys)
+}
+
+// backfillOI seeds hourly OI history from the venue for instruments whose
+// own history is shorter than the keep window. Points older than the oldest
+// own point are merged in; own observations stay.
+func (c *Collector) backfillOI(ctx context.Context) {
+	ids := c.universeIDs()
+	need := make([]string, 0, len(ids))
+	cut := time.Now().Add(-c.cfg.OIKeep).Add(90 * time.Minute).UnixMilli()
+	c.mu.RLock()
+	for _, id := range ids {
+		st := c.states[id]
+		if st != nil && (len(st.oiHist) == 0 || st.oiHist[0].ts > cut) {
+			need = append(need, id)
+		}
+	}
+	c.mu.RUnlock()
+	if len(need) == 0 {
+		return
+	}
+	c.log.Info("oi backfill start", "instruments", len(need))
+	n, err := sweep(ctx, need, func(ctx context.Context, id string) error {
+		pts, err := c.cli.OIHistory(ctx, id, "1H", 30)
+		if err != nil {
+			return err
+		}
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		st := c.states[id]
+		if st == nil {
+			return nil
+		}
+		oldest := int64(math.MaxInt64)
+		if len(st.oiHist) > 0 {
+			oldest = st.oiHist[0].ts
+		}
+		var add []oiPoint
+		for i := len(pts) - 1; i >= 0; i-- { // oldest first
+			p := pts[i]
+			usd := p.OIUsd
+			if usd <= 0 && st.tk.Last > 0 {
+				usd = p.OICcy * st.tk.Last
+			}
+			if p.TS < oldest && usd > 0 {
+				add = append(add, oiPoint{ts: p.TS, usd: usd})
+			}
+		}
+		if len(add) > 0 {
+			st.oiHist = append(add, st.oiHist...)
+		}
+		return nil
+	})
+	if err != nil && ctx.Err() == nil {
+		c.log.Warn("oi backfill", "ok", n, "of", len(need), "err", err)
+	} else {
+		c.log.Info("oi backfill done", "instruments", n)
+	}
+	c.mu.Lock()
+	l := c.health.Loops["oiBackfill"]
+	l.Passes++
+	l.Items = n
+	l.LastOK = time.Now().UnixMilli()
+	if err != nil {
+		l.LastErr = err.Error()
+	}
+	c.health.Loops["oiBackfill"] = l
+	c.mu.Unlock()
+}
+
 // refreshUniverse loads SWAP instruments and keeps the linear ones settled in
 // the configured currencies and in state live.
 func (c *Collector) refreshUniverse(ctx context.Context) error {
@@ -272,6 +483,7 @@ func (c *Collector) refreshUniverse(ctx context.Context) error {
 			continue
 		}
 		seen[in.ID] = true
+		c.ctVals.Store(in.ID, in.CtVal)
 		st := c.states[in.ID]
 		if st == nil {
 			st = &state{}
@@ -282,6 +494,7 @@ func (c *Collector) refreshUniverse(ctx context.Context) error {
 	for id, st := range c.states {
 		if !seen[id] && st.inst.CtType != "" {
 			delete(c.states, id) // delisted or suspended
+			c.ctVals.Delete(id)
 		}
 	}
 	c.health.Universe = len(seen)
@@ -313,27 +526,24 @@ func (c *Collector) pollFast(ctx context.Context) error {
 	c.mu.Lock()
 	n := 0
 	for _, tk := range tks {
-		if st := c.states[tk.InstID]; st != nil {
+		if st := c.states[tk.InstID]; st != nil && tk.TS >= st.tk.TS {
 			st.tk = tk
 			n++
 		}
 	}
 	for _, m := range marks {
-		if st := c.states[m.InstID]; st != nil {
-			st.mark = m.MarkPx
+		if st := c.states[m.InstID]; st != nil && m.TS >= st.markTS {
+			st.mark, st.markTS = m.MarkPx, m.TS
 		}
 	}
-	for id, st := range c.states {
-		if st.inst.Uly != "" {
-			if px, ok := idx[st.inst.Uly]; ok {
-				st.index = px
-			}
-		}
-		_ = id
+	for u, px := range idx {
+		c.index[u] = px
 	}
 	c.mu.Unlock()
 	c.setItems("fast", n)
-	c.compute(now)
+	if c.stream == nil {
+		c.compute(now)
+	}
 	return nil
 }
 
@@ -344,26 +554,14 @@ func (c *Collector) pollOI(ctx context.Context) error {
 		return err
 	}
 	now := time.Now()
-	cut := now.Add(-c.cfg.OIKeep).UnixMilli()
 	c.mu.Lock()
 	n := 0
 	for _, oi := range ois {
 		st := c.states[oi.InstID]
-		if st == nil {
+		if st == nil || oi.TS < st.oi.TS {
 			continue
 		}
-		st.oi = oi
-		usd := oi.OIUsd
-		if usd <= 0 && st.tk.Last > 0 {
-			usd = oi.OICcy * st.tk.Last
-		}
-		// One point per minute is enough for hourly deltas.
-		if l := len(st.oiHist); l == 0 || now.UnixMilli()-st.oiHist[l-1].ts >= 60_000 {
-			st.oiHist = append(st.oiHist, oiPoint{ts: now.UnixMilli(), usd: usd})
-		}
-		for len(st.oiHist) > 0 && st.oiHist[0].ts < cut {
-			st.oiHist = st.oiHist[1:]
-		}
+		c.applyOI(st, oi, now)
 		n++
 	}
 	c.mu.Unlock()
@@ -379,7 +577,7 @@ func (c *Collector) pollFunding(ctx context.Context) error {
 	c.mu.Lock()
 	n := 0
 	for _, fr := range fs {
-		if st := c.states[fr.InstID]; st != nil {
+		if st := c.states[fr.InstID]; st != nil && fr.TS >= st.fund.TS {
 			st.fund = fr
 			n++
 		}
@@ -487,13 +685,16 @@ func (c *Collector) sweepCandles(ctx context.Context, bar string) error {
 		if st == nil {
 			return nil
 		}
+		// A short series (first visit, a store seeded with fewer bars, a new
+		// listing) is fetched in full: one request either way, only more
+		// bytes. A complete series needs just the forming bar and two closed.
+		backfill := c.cfg.HourlyBackfill
+		if bar != "1H" {
+			backfill = c.cfg.DailyBackfill
+		}
 		limit := 3
-		if have == 0 {
-			if bar == "1H" {
-				limit = c.cfg.HourlyBackfill
-			} else {
-				limit = c.cfg.DailyBackfill
-			}
+		if have < backfill-5 {
+			limit = backfill
 		}
 		cs, err := c.cli.Candles(ctx, id, bar, limit)
 		if err != nil {
@@ -649,7 +850,7 @@ func (c *Collector) compute(now time.Time) {
 		}
 	}
 	rows := make([]Row, 0, len(c.states))
-	cov := map[string]int{"hourly": 0, "daily": 0, "book": 0, "oiHist": 0}
+	cov := map[string]int{"hourly": 0, "daily": 0, "book": 0, "oiHist": 0, "flow": 0}
 	ticks := make([]Tick, 0, len(c.states))
 	for _, st := range c.states {
 		if st.inst.CtType == "" || st.tk.Last <= 0 {
@@ -668,9 +869,12 @@ func (c *Collector) compute(now time.Time) {
 		if r.Cov.OIHist {
 			cov["oiHist"]++
 		}
+		if r.Cov.Flow {
+			cov["flow"]++
+		}
 		rows = append(rows, r)
 		ticks = append(ticks, Tick{
-			InstID: st.inst.ID, Last: st.tk.Last, Mark: st.mark, Index: st.index,
+			InstID: st.inst.ID, Last: st.tk.Last, Mark: st.mark, Index: c.index[st.inst.Uly],
 			Bid: st.tk.BidPx, Ask: st.tk.AskPx, VolCcy24h: st.tk.VolCcy24h,
 			VolQuote24h: st.tk.VolCcy24h * st.tk.Last, OICcy: st.oi.OICcy, OIUsd: float64(r.OI),
 			Funding: st.fund.Rate, NextFunding: st.fund.NextRate,
@@ -683,22 +887,38 @@ func (c *Collector) compute(now time.Time) {
 	c.health.RowsAt = now.UnixMilli()
 	c.health.Coverage = cov
 	c.health.Benchmark = c.cfg.BenchmarkInstID
-	// Persist once a minute: rows for analytics, ticks for OI / price history.
+	if c.stream != nil {
+		st := c.stream.Stats()
+		c.health.Stream = &st
+		ist := c.idxStream.Stats()
+		c.health.IndexStream = &ist
+	}
+	// Persist once a minute: rows for analytics, ticks for OI / price history,
+	// and the taker buckets of the minute that just closed.
 	if now.Sub(c.lastRowsStored) >= time.Minute {
 		c.lastRowsStored = now
-		c.lastTickStored = now
 		for _, s := range c.sinks {
 			s.OnTick(now, ticks)
 			s.OnRows(now, rows)
+		}
+		prev := now.Unix()/60 - 1
+		if c.lastFlowMinute != prev {
+			c.lastFlowMinute = prev
+			if closed := c.flow.Closed(prev); len(closed) > 0 {
+				for _, s := range c.sinks {
+					s.OnFlow(closed)
+				}
+			}
 		}
 	}
 }
 
 func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[string]float64) Row {
 	last := st.tk.Last
+	index := c.index[st.inst.Uly]
 	r := Row{
 		InstID: st.inst.ID, Symbol: st.inst.Base, Settle: st.inst.SettleCcy,
-		Lever: F(st.inst.Lever), Last: F(last), Mark: F(st.mark), Index: F(st.index),
+		Lever: F(st.inst.Lever), Last: F(last), Mark: F(st.mark), Index: F(index),
 		Bid: F(st.tk.BidPx), Ask: F(st.tk.AskPx), Updated: st.tk.TS,
 		Chg: PerPeriod{}, VolX: PerPeriod{}, OID: PerPeriod{}, VsBtc: PerPeriod{},
 		TakerBuy: PerPeriod{}, Delta: PerPeriod{},
@@ -709,8 +929,8 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 		r.Listed = F(math.NaN())
 	}
 	r.Basis = F(math.NaN())
-	if st.mark > 0 && st.index > 0 {
-		r.Basis = F(st.mark/st.index - 1)
+	if st.mark > 0 && index > 0 {
+		r.Basis = F(st.mark/index - 1)
 	}
 	vol24 := st.tk.VolCcy24h * last
 	r.Vol24 = F(vol24)
@@ -758,6 +978,16 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 			r.VsBtc[p] = F(math.NaN())
 		}
 	}
+	if n := len(st.hourly); n > 1 {
+		k := 24
+		if k > n {
+			k = n
+		}
+		r.Spark = make([]F, 0, k)
+		for i := k - 1; i >= 0; i-- {
+			r.Spark = append(r.Spark, F(st.hourly[i].C))
+		}
+	}
 	r.ATR = F(metrics.ATRPct(last, st.hourly, 14))
 	r.RV24 = F(metrics.RealizedVol(metrics.LogReturns(st.hourly, 24), 24*365))
 	s := metrics.StrengthVs(st.hourlyRet, bRet)
@@ -776,6 +1006,13 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 	r.Range1d = F(metrics.RangeToday(st.daily))
 	r.ToHigh = F(metrics.DistanceToHigh(last, st.daily, 30))
 	r.ToLow = F(metrics.DistanceToLow(last, st.daily, 30))
+	dayStart, weekStart, monthStart := metrics.PeriodStarts(now)
+	r.DO = level(last, metrics.OpenAt(st.daily, dayStart))
+	r.WO = level(last, metrics.OpenAt(st.daily, weekStart))
+	r.MO = level(last, metrics.OpenAt(st.daily, monthStart))
+	r.MA50 = level(last, metrics.SMA(st.daily, 50))
+	r.MA100 = level(last, metrics.SMA(st.daily, 100))
+	r.MA200 = level(last, metrics.SMA(st.daily, 200))
 
 	// Book block
 	if !st.depthAt.IsZero() && now.Sub(st.depthAt) < 10*time.Minute {
@@ -789,9 +1026,27 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 		nan := F(math.NaN())
 		r.Depth01, r.Depth05, r.Depth1, r.Imb, r.Spread = nan, nan, nan, nan, nan
 	}
+	// Flow block: a period reads only once the stream has run that long,
+	// otherwise a partial window would pass for the whole period.
+	r.Trades = PerPeriod{}
+	r.Tape = F(math.NaN())
+	since := c.flow.Since()
+	nowMs := now.UnixMilli()
 	for _, p := range Periods {
-		r.TakerBuy[p] = F(math.NaN())
-		r.Delta[p] = F(math.NaN())
+		h := PeriodHours[p]
+		r.TakerBuy[p], r.Delta[p], r.Trades[p] = F(math.NaN()), F(math.NaN()), F(math.NaN())
+		if since.IsZero() || now.Sub(since) < time.Duration(h)*time.Hour {
+			continue
+		}
+		w := c.flow.Window(st.inst.ID, nowMs, h*60)
+		r.TakerBuy[p] = F(w.TakerShare())
+		r.Delta[p] = F(w.Delta())
+		r.Trades[p] = F(float64(w.Trades))
+	}
+	if !since.IsZero() && now.Sub(since) >= 5*time.Minute {
+		w := c.flow.Window(st.inst.ID, nowMs, 5)
+		r.Tape = F(float64(w.Trades) / 5)
+		r.Cov.Flow = now.Sub(since) >= time.Hour && c.flow.Window(st.inst.ID, nowMs, 60).Trades > 0
 	}
 	return r
 }

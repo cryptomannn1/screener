@@ -3,6 +3,7 @@ package metrics
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 func approx(t *testing.T, name string, got, want, eps float64) {
@@ -79,4 +80,33 @@ func TestVolRegime(t *testing.T) {
 
 func TestFundingAPR(t *testing.T) {
 	approx(t, "8h", FundingAPR(0.0001, 8*3600*1000), 0.0001*3*365, 1e-12)
+}
+
+func TestSMAAndOpens(t *testing.T) {
+	bars := []Bar{{C: 10}, {C: 20}, {C: 30}, {C: 40}}
+	approx(t, "sma3", SMA(bars, 3), 20, 1e-12)
+	if !math.IsNaN(SMA(bars, 5)) {
+		t.Fatal("sma without history must be NaN")
+	}
+	approx(t, "dist", Distance(110, 100), 0.1, 1e-12)
+
+	// Wednesday 2026-10-28 15:00 UTC → day 28th, week Monday 26th, month 1st.
+	at := time.Date(2026, 10, 28, 15, 0, 0, 0, time.UTC)
+	d, w, m := PeriodStarts(at)
+	if d != time.Date(2026, 10, 28, 0, 0, 0, 0, time.UTC).UnixMilli() ||
+		w != time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC).UnixMilli() ||
+		m != time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC).UnixMilli() {
+		t.Fatalf("period starts %d %d %d", d, w, m)
+	}
+	daily := []Bar{{TS: d, O: 3}, {TS: d - 86_400_000, O: 2}, {TS: w, O: 1}}
+	approx(t, "open day", OpenAt(daily, d), 3, 0)
+	approx(t, "open week", OpenAt(daily, w), 1, 0)
+	if !math.IsNaN(OpenAt(daily, m)) {
+		t.Fatal("missing month open must be NaN")
+	}
+	// Sunday belongs to the week that started the previous Monday.
+	_, w2, _ := PeriodStarts(time.Date(2026, 11, 1, 10, 0, 0, 0, time.UTC))
+	if w2 != time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC).UnixMilli() {
+		t.Fatalf("sunday week start %d", w2)
+	}
 }

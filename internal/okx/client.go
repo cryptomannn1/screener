@@ -33,6 +33,8 @@ type Client struct {
 	limCandles *Limiter // market/candles: 40/2s
 	limBooks   *Limiter // market/books: 40/2s
 	limFull    *Limiter // market/books-full: 10/2s
+	limHist    *Limiter // market/history-candles: 20/2s
+	limRubik   *Limiter // rubik/stat/*: 5/2s
 }
 
 // New builds a client. A nil logger discards.
@@ -51,6 +53,8 @@ func New(log *slog.Logger) *Client {
 		limCandles: NewLimiter(24, 2*time.Second),
 		limBooks:   NewLimiter(24, 2*time.Second),
 		limFull:    NewLimiter(6, 2*time.Second),
+		limHist:    NewLimiter(12, 2*time.Second),
+		limRubik:   NewLimiter(4, 2*time.Second),
 	}
 }
 
@@ -330,6 +334,55 @@ func (c *Client) Candles(ctx context.Context, instID, bar string, limit int) ([]
 		return nil, err
 	}
 	return parseCandles(raw), nil
+}
+
+// HistoryCandles returns up to limit bars (max 100) strictly OLDER than the
+// millisecond timestamp after, newest first (market/history-candles). Page
+// backwards by passing the last bar's TS as the next after. after = 0 starts
+// from the latest bar.
+func (c *Client) HistoryCandles(ctx context.Context, instID, bar string, after int64, limit int) ([]Candle, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	var raw [][]string
+	q := url.Values{"instId": {instID}, "bar": {bar}, "limit": {strconv.Itoa(limit)}}
+	if after > 0 {
+		q.Set("after", strconv.FormatInt(after, 10))
+	}
+	if err := c.get(ctx, c.limHist, "/api/v5/market/history-candles", q, &raw); err != nil {
+		return nil, err
+	}
+	return parseCandles(raw), nil
+}
+
+// OIPoint is one open-interest observation from the history endpoint.
+type OIPoint struct {
+	TS    int64
+	OI    float64 // contracts
+	OICcy float64 // base coin
+	OIUsd float64 // USD
+}
+
+// OIHistory returns open interest per bar (period "5m", "1H", "1D"), newest
+// first, up to limit (max 100), from rubik/stat/contracts/open-interest-history.
+// Limit 5 requests / 2 s per IP. Rows are [ts, oi, oiCcy, oiUsd].
+func (c *Client) OIHistory(ctx context.Context, instID, period string, limit int) ([]OIPoint, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	var raw [][]string
+	q := url.Values{"instId": {instID}, "period": {period}, "limit": {strconv.Itoa(limit)}}
+	if err := c.get(ctx, c.limRubik, "/api/v5/rubik/stat/contracts/open-interest-history", q, &raw); err != nil {
+		return nil, err
+	}
+	out := make([]OIPoint, 0, len(raw))
+	for _, r := range raw {
+		if len(r) < 4 {
+			continue
+		}
+		out = append(out, OIPoint{TS: ms(r[0]), OI: f(r[1]), OICcy: f(r[2]), OIUsd: f(r[3])})
+	}
+	return out, nil
 }
 
 func parseCandles(raw [][]string) []Candle {

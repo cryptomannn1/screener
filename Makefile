@@ -2,6 +2,8 @@
 
 build:
 	go build -o bin/screener ./cmd/screener
+	go build -o bin/backfill ./cmd/backfill
+	go build -o bin/backtest ./cmd/backtest
 
 test:
 	go vet ./... && go test ./...
@@ -23,3 +25,12 @@ ch-sql:
 
 docker:
 	docker build -t screener:local .
+
+backfill:
+	go run ./cmd/backfill -clickhouse clickhouse://default:screener@localhost:9000/screener -top 150 -days 180
+
+backtest:
+	go run ./cmd/backtest -clickhouse clickhouse://default:screener@localhost:9000/screener -out backtest-report.md
+
+widget:
+	cd widget/sandbox && npm install && npm run dev

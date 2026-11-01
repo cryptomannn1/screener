@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"math"
 	"strconv"
+
+	"screener/internal/metrics"
 )
 
 // F is a float that serialises NaN as null, so a metric that cannot be
@@ -90,12 +92,35 @@ type Row struct {
 	Imb     F `json:"imb"`    // (bid05 − ask05) / (bid05 + ask05)
 	Spread  F `json:"spread"` // bps
 
-	// Flow (needs the trade stream, phase 2)
+	// Flow (trade stream)
 	TakerBuy PerPeriod `json:"takerBuy"` // taker buy share of volume
 	Delta    PerPeriod `json:"delta"`    // (buy − sell) / total
+	Trades   PerPeriod `json:"trades"`   // taker orders in the period
+	Tape     F         `json:"tape"`     // taker orders per minute, last 5 minutes
+
+	// Levels (UTC daily bars): distance of last from the level, and the level
+	// price itself for tooltips.
+	DO    Level `json:"do"`   // today's UTC open
+	WO    Level `json:"wo"`   // open of the current ISO week (Monday UTC)
+	MO    Level `json:"mo"`   // open of the current month (UTC)
+	MA50  Level `json:"ma50"` // simple MA of 50 daily closes incl. the forming day
+	MA100 Level `json:"ma100"`
+	MA200 Level `json:"ma200"`
+
+	Spark []F `json:"spark"` // last 24 hourly closes, oldest first (forming bar last)
 
 	Updated int64    `json:"updated"` // ms of the last ticker
 	Cov     Coverage `json:"cov"`
+}
+
+// Level is a reference price and the distance of last from it.
+type Level struct {
+	Px   F `json:"px"`
+	Dist F `json:"dist"` // last / px − 1
+}
+
+func level(last, px float64) Level {
+	return Level{Px: F(px), Dist: F(metrics.Distance(last, px))}
 }
 
 // Coverage says which data families have arrived for the row.

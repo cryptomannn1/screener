@@ -115,3 +115,29 @@ ENGINE = MergeTree
 PARTITION BY toYYYYMMDD(ts)
 ORDER BY (inst_id, ts)
 TTL ts + INTERVAL {ttl} DAY;
+
+-- Taker flow per closed minute from the trade stream (phase 2): quote volume
+-- bought and sold by takers and the number of taker orders. Feeds takerBuy,
+-- delta and tape per period, and the backtest's flow signals.
+CREATE TABLE IF NOT EXISTS flow_1m (
+  ts         DateTime('UTC'),
+  inst_id    LowCardinality(String),
+  buy_quote  Float64,
+  sell_quote Float64,
+  trades     UInt32,
+  buy_trades UInt32
+)
+ENGINE = ReplacingMergeTree
+PARTITION BY toYYYYMMDD(ts)
+ORDER BY (inst_id, ts)
+TTL ts + INTERVAL {ttl} DAY;
+
+-- Levels (v0.3): distances of last from the day / week / month open and the
+-- daily MA 50 / 100 / 200. Added to an existing table with ALTER so an old
+-- deployment upgrades in place.
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS do_dist Float64;
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS wo_dist Float64;
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS mo_dist Float64;
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS ma50_dist Float64;
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS ma100_dist Float64;
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS ma200_dist Float64;

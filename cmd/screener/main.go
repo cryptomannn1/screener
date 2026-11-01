@@ -41,6 +41,10 @@ func main() {
 	hourlyEvery := fs.Duration("hourly", 2*time.Minute, "1H candles refresh pass period")
 	dailyEvery := fs.Duration("daily", 15*time.Minute, "1Dutc candles refresh pass period")
 	booksEvery := fs.Duration("books", 30*time.Second, "order-book sweep period")
+	flow := fs.Bool("flow", true, "use the OKX WebSocket stream (tickers, mark, index, OI, funding, trades); off = REST only")
+	computeEvery := fs.Duration("compute", time.Second, "row recompute period with the stream on")
+	wsPerConn := fs.Int("ws-per-conn", 200, "instruments per WebSocket connection")
+	static := fs.String("static", "", "directory served under /ui/ (prototype page); empty = off")
 	chDSN := fs.String("clickhouse", "", "ClickHouse DSN; empty = no store")
 	chTTL := fs.Int("ch-ttl-days", 180, "store retention for ticks / depth / rows")
 	chOptional := fs.Bool("ch-optional", false, "run without the store if it fails to open")
@@ -72,13 +76,16 @@ func main() {
 	col := collector.New(cli, collector.Config{
 		FastEvery: *fast, OIEvery: *oiEvery, HourlyEvery: *hourlyEvery, DailyEvery: *dailyEvery,
 		BooksEvery: *booksEvery, BooksTop: *booksTop, Settle: splitList(*settle), BenchmarkInstID: *benchmark,
+		Flow: *flow, WSPerConn: *wsPerConn, ComputeEvery: *computeEvery,
 	}, log, sinks...)
 
 	if st != nil {
 		seedOI(ctx, st, col, log)
+		seedCandles(ctx, st, col, log)
+		seedFlow(ctx, st, col, log)
 	}
 
-	srv := &http.Server{Addr: *addr, Handler: api.New(col, st, version), ReadHeaderTimeout: 5 * time.Second}
+	srv := &http.Server{Addr: *addr, Handler: api.New(col, st, version, *static), ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		log.Info("listening", "addr", *addr, "version", version)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -114,6 +121,59 @@ func seedOI(ctx context.Context, st *store.Store, col *collector.Collector, log 
 		col.SeedOI(p.InstID, p.TS, p.USD)
 	}
 	log.Info("seeded oi history", "points", len(pts))
+}
+
+func seedCandles(ctx context.Context, st *store.Store, col *collector.Collector, log *slog.Logger) {
+	lctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	n := 0
+	for _, bar := range []struct {
+		bar   string
+		since time.Duration
+		limit int
+	}{{"1H", 320 * time.Hour, 300}, {"1Dutc", 240 * 24 * time.Hour, 230}} {
+		m, err := st.RecentCandles(lctx, bar.bar, time.Now().Add(-bar.since), bar.limit)
+		if err != nil {
+			log.Warn("seed candles", "bar", bar.bar, "err", err)
+			continue
+		}
+		for id, cs := range m {
+			col.SeedCandles(id, bar.bar, cs)
+			n += len(cs)
+		}
+	}
+	log.Info("seeded candles", "bars", n)
+}
+
+func seedFlow(ctx context.Context, st *store.Store, col *collector.Collector, log *slog.Logger) {
+	lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	rows, err := st.RecentFlow(lctx, time.Now().Add(-25*time.Hour))
+	if err != nil {
+		log.Warn("seed flow", "err", err)
+		return
+	}
+	if len(rows) == 0 {
+		return
+	}
+	f := col.Flow()
+	oldest, newest := rows[0].Minute, rows[0].Minute
+	for _, r := range rows {
+		f.Seed(r.InstID, r.Minute, r.BuyQuote, r.SellQuote, int(r.Trades), int(r.BuyTrades))
+		if r.Minute < oldest {
+			oldest = r.Minute
+		}
+		if r.Minute > newest {
+			newest = r.Minute
+		}
+	}
+	// Only count the restored range as continuous if it reaches (almost) now.
+	if gap := time.Now().Unix()/60 - newest; gap <= 5 {
+		f.SetSince(time.Unix(oldest*60, 0))
+		log.Info("seeded flow", "minutes", len(rows), "since", time.Unix(oldest*60, 0).UTC().Format(time.RFC3339))
+	} else {
+		log.Info("seeded flow buckets but gap too large to count as continuous", "minutes", len(rows), "gapMin", gap)
+	}
 }
 
 func applyEnv(fs *flag.FlagSet) {

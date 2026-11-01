@@ -1,0 +1,90 @@
+/* Shared primitives of the screener widget, all prefixed `scr-`. Every colour
+   and size is a terminal token (see HANDOVER.md for the list); the host defines
+   them, the widget only reads them. */
+
+.scr-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8);
+  background: var(--card-background);
+  color: var(--text-high-emphasis);
+  font: inherit;
+  font-weight: 500;
+  letter-spacing: normal;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease-out;
+}
+.scr-btn:hover {
+  background: var(--card-neutral-background);
+}
+.scr-btn.-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-mid-emphasis);
+}
+.scr-btn.-ghost:hover {
+  background: var(--dropdown-hover);
+  color: var(--text-high-emphasis);
+}
+.scr-btn.-icon {
+  width: 28px;
+  padding: 0;
+}
+.scr-btn.-primary {
+  border-color: transparent;
+  background: var(--primary-accent);
+  color: var(--text-light);
+}
+.scr-btn.-primary:hover {
+  background: var(--primary-deep);
+}
+.scr-btn[aria-expanded='true'] {
+  background: var(--card-neutral-background);
+  color: var(--text-high-emphasis);
+}
+.scr-btn:focus-visible,
+.scr-input:focus-visible {
+  outline: 1px solid var(--control-focus-border);
+  outline-offset: -1px;
+}
+.scr-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-8);
+  background: var(--primary-accent);
+  color: var(--text-light);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.scr-icon {
+  display: block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.scr-input {
+  height: 28px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-8);
+  background: var(--card-background);
+  color: var(--text-high-emphasis);
+  font: inherit;
+  letter-spacing: normal;
+}
+.scr-input::placeholder {
+  color: var(--text-mid-emphasis);
+}
+.scr-input:hover {
+  border-color: var(--primary-accent);
+}

@@ -1,0 +1,325 @@
+/* Terminal tokens for the sandbox, copied from terminal-front
+   `src/assets/styles/_theme.scss`: the theme-independent block on `:root`,
+   light on `:root` too (the terminal puts it on `body`), dark on
+   `[data-theme="dark"]` (the terminal: `body[theme='dark']`). The widget
+   reads only token names, so in the terminal the real file applies. */
+
+:root {
+  --white: #ffffff;
+  --black: #141414;
+
+  --neutral-800: #1c2026;
+  --neutral-700: #6e6e72;
+  --neutral-600: #7f7f83;
+  --neutral-500: #8e8e93;
+  --neutral-400: #ababae;
+  --neutral-300: #c3c3c5;
+  --neutral-200: #d9d9da;
+  --neutral-100: #ededed;
+  --neutral-50: #f6f6f6;
+  --neutral-25: #fafafa;
+
+  --blue-900: #003772;
+  --blue-800: #004da1;
+  --blue-700: #005fc6;
+  --blue-600: #006de4;
+  --blue-500: #007aff;
+  --blue-400: #729eff;
+  --blue-300: #a1bbff;
+  --blue-200: #c6d4ff;
+  --blue-100: #e4ebff;
+  --blue-0: #f2f5ff;
+
+  --green-900: #26513b;
+  --green-800: #367353;
+  --green-700: #438d65;
+  --green-600: #4da375;
+  --green-500: #56b683;
+  --green-400: #8ac7a4;
+  --green-300: #aed6bf;
+  --green-200: #cde5d6;
+  --green-100: #e7f2eb;
+  --green-0: #f3f9f5;
+
+  --red-900: #6c3a2f;
+  --red-800: #985242;
+  --red-700: #bb6451;
+  --red-600: #d8735e;
+  --red-500: #f18169;
+  --red-400: #f4a294;
+  --red-300: #f7beb5;
+  --red-200: #f9d6d0;
+  --red-100: #fcebe9;
+  --red-0: #fef5f4;
+
+  --yellow-900: #442304;
+  --yellow-800: #89530a;
+  --yellow-700: #a66a02;
+  --yellow-600: #d19500;
+  --yellow-500: #ffcc00;
+  --yellow-400: #ffdb0d;
+  --yellow-300: #ffec41;
+  --yellow-200: #fff886;
+  --yellow-100: #fffec1;
+  --yellow-0: #fffee7;
+
+  --orange-900: #461804;
+  --orange-800: #82350c;
+  --orange-700: #a13e0b;
+  --orange-600: #cc5002;
+  --orange-500: #ff6f00;
+  --orange-400: #ffa432;
+  --orange-300: #ffc86d;
+  --orange-200: #ffdfa5;
+  --orange-100: #fff1d3;
+  --orange-0: #fff9ec;
+
+  --overlay: rgba(28, 32, 38, 0.75);
+
+  --space-0: 0px;
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  --space-64: 64px;
+
+  --radius-4: 4px;
+  --radius-6: 6px;
+  --radius-8: 8px;
+  --radius-10: 10px;
+  --radius-12: 12px;
+  --radius-16: 16px;
+  --radius-24: 24px;
+  --radius-circle: 50%;
+
+  --layer-base: 0;
+  --layer-raised: 1;
+  --layer-sticky: 10;
+  --layer-grid-shield: 20;
+  --layer-grid-gesture: 30;
+  --layer-dropdown: 100;
+  --layer-overlay: 500;
+  --layer-scrim: 600;
+  --layer-navigation-menu: 650;
+  --layer-navigation: 700;
+  --layer-widget-fan: 800;
+  --layer-navigation-submenu: 810;
+  --layer-navigation-submenu-nested: 820;
+  --layer-modal: 900;
+  --layer-modal-menu: 910;
+  --layer-tooltip: 1000;
+  --layer-toast: 1500;
+
+  --duration-instant: 80ms;
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-grid: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --header-height: 48px;
+
+  /* ---- light (terminal: body, body[theme='light']) ---- */
+  --link-group-orange: var(--orange-500);
+  --link-group-teal: #0d9488;
+  --link-group-blue: var(--blue-500);
+  --link-group-purple: #8b5cf6;
+  --link-group-pink: #db2777;
+  --terminal-v2-surface: #fff;
+  --terminal-v2-field: #fff;
+  --terminal-v2-subtle: #f4f5f5;
+  --terminal-v2-text: #202326;
+  --terminal-v2-muted: #60676a;
+  --terminal-v2-border: #d8dcdd;
+  --dropdown-background: var(--card-background);
+  --dropdown-hover: color-mix(in srgb, var(--terminal-v2-text) 5%, var(--dropdown-background));
+  --dropdown-border: color-mix(in srgb, var(--terminal-v2-text) 10%, transparent);
+  --dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --table-pin-shadow: rgb(0 0 0 / 25%);
+  --checkbox-fill: #242829;
+  --checkbox-mark: #fff;
+  --checkbox-border: #60676a;
+  color-scheme: light;
+
+  --primary-accent: var(--blue-500);
+  --primary-deep: var(--blue-800);
+  --primary-soft: var(--blue-300);
+  --control-focus-border: color-mix(in srgb, var(--primary-deep) 45%, var(--terminal-v2-muted));
+
+  --text-high-emphasis: var(--neutral-800);
+  --text-mid-emphasis: var(--neutral-500);
+  --text-low-emphasis: var(--neutral-400);
+  --text-light: var(--white);
+  --text-invert: var(--white);
+  --text-success-accent: var(--green-500);
+  --text-error-accent: var(--red-500);
+  --text-warning-accent: var(--orange-500);
+  --text-attention-accent: var(--yellow-500);
+
+  --icons-high-emphasis: var(--neutral-800);
+  --icons-mid-emphasis: var(--neutral-500);
+  --icons-low-emphasis: var(--neutral-300);
+  --icons-success-accent: var(--green-500);
+  --icons-error-accent: var(--red-500);
+  --icons-warning-accent: var(--orange-500);
+  --icons-attention-accent: var(--yellow-500);
+  --icons-light: var(--white);
+
+  --navbar-background: var(--white);
+  --card-background: var(--white);
+  --dark-background: var(--neutral-800);
+  --app-background: var(--neutral-25);
+
+  --card-primary-background-light: var(--blue-100);
+  --card-neutral-background: var(--neutral-100);
+  --menu-hover-background: var(--neutral-100);
+  --card-success-background-light: var(--green-100);
+  --card-error-background-light: var(--red-100);
+  --card-attention-background-light: var(--yellow-100);
+  --card-warning-background-light: var(--orange-100);
+
+  --border: var(--neutral-100);
+  --border-error: var(--red-500);
+
+  --success-deep: var(--green-800);
+  --success-soft: var(--green-300);
+  --error-soft: var(--red-300);
+  --warning-soft: var(--orange-300);
+  --attention-soft: var(--yellow-300);
+  --error-deep: var(--red-800);
+  --orange-deep: var(--orange-800);
+  --attention-deep: var(--yellow-800);
+
+  --border-secondary: transparent;
+  --background-secondary: transparent;
+  --background-tertiary: transparent;
+
+  --long: var(--icons-success-accent);
+  --short: var(--icons-error-accent);
+  --depth-bid-fill: rgba(86, 182, 131, 0.16);
+  --depth-ask-fill: rgba(241, 129, 105, 0.16);
+  --book-fill: color-mix(in srgb, var(--text-high-emphasis) 10%, transparent);
+  --book-outside-opacity: 0.4;
+
+  --widget-background: var(--white);
+  --widget-header-background: var(--neutral-25);
+  --grid-placeholder: rgba(0, 122, 255, 0.1);
+
+  --shadow-elevate:
+    0 0 0 1px rgba(0, 0, 0, 0.06), 0 6px 6px -3px rgba(0, 0, 0, 0.06),
+    0 24px 24px -12px rgba(0, 0, 0, 0.04), 0 24px 24px 2px rgba(0, 0, 0, 0.1);
+  --overlay-backdrop: rgba(20, 20, 20, 0.35);
+}
+
+/* ---- dark (terminal: body[theme='dark']) ---- */
+[data-theme='dark'] {
+  --link-group-orange: var(--orange-400);
+  --link-group-teal: #2dd4bf;
+  --link-group-blue: var(--blue-400);
+  --link-group-purple: #a78bfa;
+  --link-group-pink: #f472b6;
+  --terminal-v2-surface: #000000;
+  --terminal-v2-field: #000000;
+  --terminal-v2-subtle: var(--black);
+  --terminal-v2-text: var(--text-high-emphasis);
+  --terminal-v2-muted: var(--text-mid-emphasis);
+  --terminal-v2-border: var(--border-secondary);
+  --dropdown-background: #1a1a1c;
+  --dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  --table-pin-shadow: rgb(0 0 0 / 25%);
+  --checkbox-fill: var(--text-high-emphasis);
+  --checkbox-mark: #000000;
+  --checkbox-border: var(--text-mid-emphasis);
+  color-scheme: dark;
+
+  --primary-accent: var(--blue-500);
+  --primary-deep: var(--blue-300);
+  --primary-soft: var(--blue-300);
+  --control-focus-border: color-mix(in srgb, var(--primary-deep) 45%, var(--terminal-v2-muted));
+
+  --text-high-emphasis: var(--neutral-50);
+  --text-mid-emphasis: var(--neutral-500);
+  --text-low-emphasis: var(--neutral-700);
+  --text-light: var(--white);
+  --text-invert: var(--black);
+  --text-success-accent: var(--green-500);
+  --text-error-accent: var(--red-500);
+  --text-warning-accent: var(--orange-500);
+  --text-attention-accent: var(--yellow-500);
+
+  --icons-high-emphasis: var(--neutral-50);
+  --icons-mid-emphasis: var(--neutral-500);
+  --icons-low-emphasis: var(--neutral-700);
+  --icons-success-accent: var(--green-500);
+  --icons-error-accent: var(--red-500);
+  --icons-warning-accent: var(--orange-500);
+  --icons-attention-accent: var(--yellow-500);
+  --icons-light: var(--white);
+
+  --navbar-background: var(--black);
+  --card-background: #101011;
+  --dark-background: var(--neutral-800);
+  --app-background: #090909;
+
+  --card-primary-background-light: #007aff26;
+  --card-neutral-background: #1c1c1e;
+  --menu-hover-background: #303033;
+  --card-success-background-light: #56b68326;
+  --card-error-background-light: #f1816926;
+  --card-attention-background-light: #ffcc0026;
+  --card-warning-background-light: #ff6f0026;
+
+  --border: #292929;
+  --border-error: var(--red-500);
+
+  --success-deep: var(--green-500);
+  --success-soft: var(--green-700);
+  --error-soft: var(--red-700);
+  --warning-soft: var(--orange-600);
+  --attention-soft: var(--yellow-600);
+  --error-deep: var(--red-500);
+  --orange-deep: var(--orange-500);
+  --attention-deep: var(--yellow-500);
+
+  --border-secondary: #3e3e3e;
+  --background-secondary: #292929;
+  --background-tertiary: #3e3e3e;
+
+  --long: var(--icons-success-accent);
+  --short: var(--icons-error-accent);
+  --depth-bid-fill: rgba(86, 182, 131, 0.22);
+  --depth-ask-fill: rgba(241, 129, 105, 0.22);
+  --book-fill: color-mix(in srgb, var(--text-high-emphasis) 14%, transparent);
+  --book-outside-opacity: 0.4;
+
+  --widget-background: #101011;
+  --widget-header-background: #161617;
+  --grid-placeholder: rgba(0, 122, 255, 0.18);
+
+  --shadow-elevate:
+    0 0 0 1px rgba(255, 255, 255, 0.08), 0 6px 6px -3px rgba(0, 0, 0, 0.4),
+    0 24px 24px -12px rgba(0, 0, 0, 0.32), 0 24px 24px 2px rgba(0, 0, 0, 0.4);
+  --overlay-backdrop: rgba(0, 0, 0, 0.35);
+}
+
+/* ---- sandbox page, in the terminal's body style ---- */
+html,
+body,
+#app {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--app-background);
+  color: var(--text-high-emphasis);
+  font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}

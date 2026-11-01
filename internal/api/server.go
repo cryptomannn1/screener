@@ -23,10 +23,15 @@ type Server struct {
 	version string
 }
 
-// New builds the handler.
-func New(col *collector.Collector, st *store.Store, version string) *Server {
+// New builds the handler. staticDir, when set, is served under /ui/ (the
+// prototype page or a built widget sandbox).
+func New(col *collector.Collector, st *store.Store, version string, staticDir string) *Server {
 	s := &Server{col: col, st: st, mux: http.NewServeMux(), start: time.Now(), version: version}
+	if staticDir != "" {
+		s.mux.Handle("GET /ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir(staticDir))))
+	}
 	s.mux.HandleFunc("GET /screener", s.handleScreener)
+	s.mux.HandleFunc("GET /stream", s.handleStream)
 	s.mux.HandleFunc("GET /instruments", s.handleInstruments)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 	return s
@@ -45,10 +50,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
+	writeJSONPretty(w, code, v, false)
+}
+
+func writeJSONPretty(w http.ResponseWriter, code int, v any, pretty bool) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	enc := json.NewEncoder(w)
+	if pretty {
+		enc.SetIndent("", "  ")
+	}
 	_ = enc.Encode(v)
 }
 
@@ -63,16 +75,21 @@ type ScreenerResponse struct {
 	Coverage  map[string]int  `json:"coverage"`
 }
 
-// handleScreener: GET /screener?symbols=BTC,ETH&limit=N&sort=vol24&dir=desc
-func (s *Server) handleScreener(w http.ResponseWriter, r *http.Request) {
+// snapshot applies symbols / sort / period / dir / limit from q to the latest
+// rows. ok is false while the collector is warming up.
+func (s *Server) snapshot(q map[string][]string) (ScreenerResponse, bool) {
+	get := func(k string) string {
+		if v := q[k]; len(v) > 0 {
+			return v[0]
+		}
+		return ""
+	}
 	rows, at := s.col.Rows()
 	if at.IsZero() {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "warming up", "health": s.col.Health()})
-		return
+		return ScreenerResponse{}, false
 	}
-	q := r.URL.Query()
 	out := rows
-	if syms := q.Get("symbols"); syms != "" {
+	if syms := get("symbols"); syms != "" {
 		want := map[string]bool{}
 		for _, p := range strings.Split(strings.ToUpper(syms), ",") {
 			want[strings.TrimSpace(p)] = true
@@ -84,24 +101,85 @@ func (s *Server) handleScreener(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if key := q.Get("sort"); key != "" {
+	if key := get("sort"); key != "" {
 		out = append([]collector.Row(nil), out...)
-		desc := q.Get("dir") != "asc"
-		period := q.Get("period")
+		desc := get("dir") != "asc"
+		period := get("period")
 		if period == "" {
 			period = "24h"
 		}
 		sortRows(out, key, period, desc)
 	}
 	total := len(out)
-	if lim, _ := strconv.Atoi(q.Get("limit")); lim > 0 && lim < len(out) {
+	if lim, _ := strconv.Atoi(get("limit")); lim > 0 && lim < len(out) {
 		out = out[:lim]
 	}
 	h := s.col.Health()
-	writeJSON(w, http.StatusOK, ScreenerResponse{
+	return ScreenerResponse{
 		TS: at.UnixMilli(), Periods: collector.Periods, Benchmark: h.Benchmark,
 		Count: len(out), Total: total, Rows: out, Coverage: h.Coverage,
-	})
+	}, true
+}
+
+// handleScreener: GET /screener?symbols=BTC,ETH&limit=N&sort=vol24&dir=desc&pretty=1
+func (s *Server) handleScreener(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	resp, ok := s.snapshot(q)
+	if !ok {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "warming up", "health": s.col.Health()})
+		return
+	}
+	writeJSONPretty(w, http.StatusOK, resp, q.Get("pretty") != "")
+}
+
+// handleStream: GET /stream — Server-Sent Events. One `rows` event with the
+// same payload as /screener every time the collector recomputes (about every
+// 5 s), a comment line every 15 s as keep-alive. Same query parameters.
+func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	q := r.URL.Query()
+	var lastTS int64
+	send := func() bool {
+		resp, ok := s.snapshot(q)
+		if !ok || resp.TS == lastTS {
+			return false
+		}
+		lastTS = resp.TS
+		b, err := json.Marshal(resp)
+		if err != nil {
+			return false
+		}
+		_, _ = w.Write([]byte("event: rows\ndata: "))
+		_, _ = w.Write(b)
+		_, _ = w.Write([]byte("\n\n"))
+		fl.Flush()
+		return true
+	}
+	send()
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	keep := time.NewTicker(15 * time.Second)
+	defer keep.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-tick.C:
+			send()
+		case <-keep.C:
+			_, _ = w.Write([]byte(": ping\n\n"))
+			fl.Flush()
+		}
+	}
 }
 
 func sortRows(rows []collector.Row, key, period string, desc bool) {
