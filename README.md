@@ -39,6 +39,7 @@ Poll loops (all per IP limits from the OKX docs, kept at ~90 %):
 | `hourly` | `market/candles bar=1H` | sweep every 2 min | 300 bars on first visit, then last 3 |
 | `daily` | `market/candles bar=1Dutc` | sweep every 15 min | 230 bars first (MA 200), then last 3 |
 | `books` | `market/books sz=400`, `books-full sz=5000` when 400 levels stop short of ±1 % | continuous sweep, ≥ 30 s | depth bands ±0.1 / 0.5 / 1 %, spread, imbalance; a band beyond the snapshot is `null` |
+| `meta` | CoinGecko `coins/markets` (top 2000 by cap, then the categories of a fixed sector taxonomy) | caps every 30 min, sectors every 24 h; one call per 13 s without a key | `mcap`, `fdv`, `mcapRank`, `sector`, `name` for crypto rows; the asset `class` itself comes from the venue's `instCategory` (crypto / stock / commodity / pre-market) |
 
 The benchmark (`-benchmark`, default `BTC-USDT-SWAP`) is always swept first so
 the strength block compares against fresh BTC returns.
@@ -77,6 +78,11 @@ Flags double as environment variables (`-ch-ttl-days` → `CH_TTL_DAYS`):
 | `-clickhouse` | — | DSN `clickhouse://user:pass@host:9000/db`; empty = no store |
 | `-ch-ttl-days` | `180` | retention of `ticks`, `depth`, `rows` (candles keep 730 days) |
 | `-ch-optional` | `false` | run in memory if the store fails to open |
+| `-meta` | `true` | resolve market cap / FDV / sector for crypto rows from CoinGecko |
+| `-cg-key` | — | CoinGecko demo or pro key; without it the public limit applies (one call per 13 s, first full pass ≈ 8 min, cached in the store) |
+| `-cg-base` | `https://api.coingecko.com/api/v3` | API base; `https://pro-api.coingecko.com/api/v3` with a pro key |
+| `-cg-pages` | `8` | market pages of 250 coins scanned when matching tickers |
+| `-cg-mcap`, `-cg-sectors` | `30m`, `24h` | refresh periods |
 
 ## Store
 
@@ -89,6 +95,7 @@ With `-clickhouse` every observation is also written to ClickHouse
 - `depth` — the bands of every book sweep.
 - `rows` — the computed screener row once a minute, for preset analytics and the strength backtest.
 - `flow_1m` — taker buy / sell quote volume and order counts per closed minute from the trade stream.
+- `assets` — market cap, FDV, rank and sector per crypto symbol from the metadata resolver; a restart reads it back so rows carry caps before the first CoinGecko pass.
 
 Sizing: 517 instruments give ~750 k `ticks` and `rows` per day each and
 ~1.5 M `depth` rows; all small, flat columns — a few hundred MB a month.

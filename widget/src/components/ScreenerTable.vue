@@ -79,6 +79,12 @@
             >
               <ScreenerIcon name="more" />
             </button>
+            <span
+              v-else-if="column.text"
+              class="scr-text"
+              :class="column.tone?.(row) ? '-' + column.tone(row) : ''"
+              :title="row.name ?? null"
+            >{{ column.text(row) ?? '—' }}</span>
             <ScreenerCell
               v-else
               :view="column.format(column.value(row, ctx), row, ctx)"

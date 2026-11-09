@@ -141,3 +141,22 @@ ALTER TABLE rows ADD COLUMN IF NOT EXISTS mo_dist Float64;
 ALTER TABLE rows ADD COLUMN IF NOT EXISTS ma50_dist Float64;
 ALTER TABLE rows ADD COLUMN IF NOT EXISTS ma100_dist Float64;
 ALTER TABLE rows ADD COLUMN IF NOT EXISTS ma200_dist Float64;
+
+-- Assets (v0.4): market cap, FDV, rank and sector per crypto base symbol from
+-- the metadata resolver, kept so a restart needs no external calls.
+CREATE TABLE IF NOT EXISTS assets (
+  symbol  String,
+  cg_id   String,
+  name    String,
+  mcap    Float64,
+  fdv     Float64,
+  rank    UInt32,
+  sector  LowCardinality(String),
+  updated DateTime64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(updated)
+ORDER BY symbol;
+
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS class LowCardinality(String);
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS sector LowCardinality(String);
+ALTER TABLE rows ADD COLUMN IF NOT EXISTS mcap Float64;

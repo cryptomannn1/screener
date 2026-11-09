@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"screener/internal/collector"
+	"screener/internal/meta"
 	"screener/internal/store"
 )
 
@@ -21,6 +22,13 @@ type Server struct {
 	mux     *http.ServeMux
 	start   time.Time
 	version string
+	meta    *meta.Service // may be nil
+}
+
+// WithMeta exposes the metadata resolver's state in /health.
+func (s *Server) WithMeta(m *meta.Service) *Server {
+	s.meta = m
+	return s
 }
 
 // New builds the handler. staticDir, when set, is served under /ui/ (the
@@ -100,6 +108,21 @@ func (s *Server) snapshot(q map[string][]string) (ScreenerResponse, bool) {
 				out = append(out, row)
 			}
 		}
+	}
+	// class=crypto,stock,… and sector=Meme,AI,… narrow by asset class and sector (v0.4).
+	if cls, sec := get("class"), get("sector"); cls != "" || sec != "" {
+		wantC, wantS := listSet(cls), listSet(sec)
+		filtered := make([]collector.Row, 0, len(out))
+		for _, row := range out {
+			if len(wantC) > 0 && !wantC[strings.ToLower(string(row.Class))] {
+				continue
+			}
+			if len(wantS) > 0 && !wantS[strings.ToLower(row.Sector)] {
+				continue
+			}
+			filtered = append(filtered, row)
+		}
+		out = filtered
 	}
 	if key := get("sort"); key != "" {
 		out = append([]collector.Row(nil), out...)
@@ -247,6 +270,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"version":   s.version,
 		"collector": h,
 	}
+	if s.meta != nil {
+		resp["meta"] = s.meta.Health()
+	}
 	code := http.StatusOK
 	if h.Rows == 0 {
 		resp["status"] = "warming"
@@ -258,4 +284,15 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		resp["store"] = nil
 	}
 	writeJSON(w, code, resp)
+}
+
+// listSet turns "a,B, c" into a lower-case set; empty input gives an empty set.
+func listSet(csv string) map[string]bool {
+	out := map[string]bool{}
+	for _, p := range strings.Split(csv, ",") {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+			out[p] = true
+		}
+	}
+	return out
 }

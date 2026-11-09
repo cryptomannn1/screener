@@ -13,8 +13,37 @@ type Instrument struct {
 	TickSz    float64 `json:"tickSz"`
 	LotSz     float64 `json:"lotSz"`
 	Lever     float64 `json:"lever"`
-	ListTime  int64   `json:"listTime"` // ms
-	State     string  `json:"state"`    // live | suspend | preopen | test
+	ListTime  int64   `json:"listTime"`     // ms
+	State     string  `json:"state"`        // live | suspend | preopen | test
+	Category  string  `json:"instCategory"` // venue asset class: 1 crypto, 3 tokenised stock / ETF / index, 4 commodity
+	RuleType  string  `json:"ruleType"`     // normal | pre_market
+}
+
+// Class is the asset class of an instrument as the venue reports it.
+type Class string
+
+const (
+	ClassCrypto    Class = "crypto"
+	ClassStock     Class = "stock"     // tokenised equities, ETFs and indices
+	ClassPreMarket Class = "premarket" // pre-listing contracts (OpenAI, Anthropic, …)
+	ClassCommodity Class = "commodity" // metals and energy
+	ClassOther     Class = "other"
+)
+
+// AssetClass maps the venue's instCategory / ruleType to a Class.
+func (i Instrument) AssetClass() Class {
+	if i.RuleType == "pre_market" {
+		return ClassPreMarket
+	}
+	switch i.Category {
+	case "1":
+		return ClassCrypto
+	case "3":
+		return ClassStock
+	case "4":
+		return ClassCommodity
+	}
+	return ClassOther
 }
 
 // Ticker is one row of market/tickers. For SWAP, Vol24h is in contracts and

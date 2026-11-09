@@ -1,4 +1,4 @@
-# screener wire contract — v0.3
+# screener wire contract — v0.4
 
 Plain HTTP GET on `-addr` (default `:8090`), JSON, `Access-Control-Allow-Origin: *`,
 `OPTIONS` answers 204. Timestamps are Unix milliseconds. Prices in the quote
@@ -19,6 +19,8 @@ GET /screener?symbols=BTC,ETH&sort=chg&period=24h&dir=desc&limit=50
 | `period`  | `24h`   | horizon for per-period sort keys: `1h`, `4h`, `24h` |
 | `dir`     | `desc`  | `asc` / `desc`; `null` sorts last |
 | `limit`   | all     | keep the first N after sorting |
+| `class`   | all     | comma list of asset classes: `crypto`, `stock`, `commodity`, `premarket` (v0.4) |
+| `sector`  | all     | comma list of crypto sectors, e.g. `Meme,AI`; see `sector` in the row (v0.4) |
 
 Response:
 
@@ -47,6 +49,12 @@ keyed by `periods`.
 | `instId`, `symbol`, `settle` | `BTC-USDT-SWAP`, `BTC`, `USDT` |
 | `lev` | max leverage |
 | `listed` | days since listing |
+| `class` | asset class as the venue lists it (`instCategory` / `ruleType`): `crypto`, `stock` (tokenised equities, ETFs, indices), `commodity`, `premarket`, `other` |
+| `name` | project name (crypto only, from the metadata resolver; absent when unknown) |
+| `sector` | one sector per coin from CoinGecko categories, first match in the fixed order `Stable, Meme, Exchange, L2, L1, AI, RWA, DePIN, Gaming, Privacy, DeFi, Infra`, else `Other`; `""` for non-crypto rows and before the first sector pass |
+| `mcap`, `fdv` | market capitalisation and fully diluted valuation, USD (crypto only; `null` for stocks, indices, commodities and unmatched tickers) |
+| `mcapRank` | market-cap rank among all coins |
+| `volMcap`, `oiMcap` | `vol24 / mcap`, `oi / mcap` |
 | `last`, `mark`, `index`, `bid`, `ask` | prices |
 | `basis` | `mark / index − 1` |
 | `chg` | `{"1h","4h","24h"}`: `last / close N hours ago − 1` (1H candles) |

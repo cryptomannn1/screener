@@ -23,6 +23,7 @@ import (
 
 	"screener/internal/api"
 	"screener/internal/collector"
+	"screener/internal/meta"
 	"screener/internal/okx"
 	"screener/internal/store"
 )
@@ -48,6 +49,12 @@ func main() {
 	chDSN := fs.String("clickhouse", "", "ClickHouse DSN; empty = no store")
 	chTTL := fs.Int("ch-ttl-days", 180, "store retention for ticks / depth / rows")
 	chOptional := fs.Bool("ch-optional", false, "run without the store if it fails to open")
+	metaOn := fs.Bool("meta", true, "resolve market cap / FDV / sector for crypto rows from CoinGecko")
+	cgBase := fs.String("cg-base", "https://api.coingecko.com/api/v3", "CoinGecko API base URL (pro-api.coingecko.com/api/v3 with a pro key)")
+	cgKey := fs.String("cg-key", "", "CoinGecko demo or pro API key; empty = public rate limits")
+	cgPages := fs.Int("cg-pages", 8, "market-cap pages of 250 coins to scan when matching symbols")
+	cgMcapEvery := fs.Duration("cg-mcap", 30*time.Minute, "market-cap refresh period")
+	cgSectorsEvery := fs.Duration("cg-sectors", 24*time.Hour, "sector refresh period")
 	applyEnv(fs)
 	_ = fs.Parse(os.Args[1:])
 
@@ -72,20 +79,48 @@ func main() {
 		}
 	}
 
+	// Asset metadata (market cap, FDV, sector) for the crypto part of the universe.
+	var assets *meta.Service
+	if *metaOn {
+		var cache meta.Cache
+		if st != nil {
+			cache = st
+		}
+		assets = meta.New(meta.Config{
+			BaseURL: *cgBase, APIKey: *cgKey, Pages: *cgPages, McapEvery: *cgMcapEvery, SectorsEvery: *cgSectorsEvery,
+		}, log, cache)
+		assets.Seed(ctx)
+	}
+
 	cli := okx.New(log)
-	col := collector.New(cli, collector.Config{
+	cfg := collector.Config{
 		FastEvery: *fast, OIEvery: *oiEvery, HourlyEvery: *hourlyEvery, DailyEvery: *dailyEvery,
 		BooksEvery: *booksEvery, BooksTop: *booksTop, Settle: splitList(*settle), BenchmarkInstID: *benchmark,
 		Flow: *flow, WSPerConn: *wsPerConn, ComputeEvery: *computeEvery,
-	}, log, sinks...)
+	}
+	if assets != nil {
+		cfg.Assets = assets
+	}
+	col := collector.New(cli, cfg, log, sinks...)
 
 	if st != nil {
 		seedOI(ctx, st, col, log)
 		seedCandles(ctx, st, col, log)
 		seedFlow(ctx, st, col, log)
 	}
+	if assets != nil {
+		go func() {
+			if err := assets.Run(ctx, col.CryptoSymbols); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("meta loop", "err", err)
+			}
+		}()
+	}
 
-	srv := &http.Server{Addr: *addr, Handler: api.New(col, st, version, *static), ReadHeaderTimeout: 5 * time.Second}
+	handler := api.New(col, st, version, *static)
+	if assets != nil {
+		handler.WithMeta(assets)
+	}
+	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
 		log.Info("listening", "addr", *addr, "version", version)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

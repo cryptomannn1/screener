@@ -11,7 +11,8 @@ const text = (value, tone = '') => ({ kind: 'text', text: value, tone })
 /** `$1.23B`, `$450M`, `$12.5M`, `$820K`, `$640` — without the sign for filters. */
 export function compactUsd(value) {
   const abs = Math.abs(value)
-  if (abs >= 1e9) return (value / 1e9).toFixed(2) + 'B'
+  if (abs >= 1e12) return (value / 1e12).toFixed(2) + 'T'
+  if (abs >= 1e9) return (value / 1e9).toFixed(abs >= 1e11 ? 0 : 2) + 'B'
   if (abs >= 1e6) return (value / 1e6).toFixed(abs >= 1e8 ? 0 : 1) + 'M'
   if (abs >= 1e3) return (value / 1e3).toFixed(0) + 'K'
   return value.toFixed(0)
@@ -19,6 +20,11 @@ export function compactUsd(value) {
 
 export function usd(value) {
   return isNumber(value) ? text('$' + compactUsd(value)) : NA
+}
+
+/** Market-cap rank: `#12`. */
+export function rank(value) {
+  return isNumber(value) ? text('#' + Math.round(value)) : NA
 }
 
 /** Price with as many decimals as its magnitude needs. */

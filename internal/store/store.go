@@ -19,6 +19,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
 	"screener/internal/collector"
+	"screener/internal/meta"
 	"screener/internal/metrics"
 	"screener/internal/okx"
 )
@@ -261,7 +262,8 @@ func (s *Store) OnRows(ts time.Time, rows []collector.Row) {
 			cf(r.VsBtc["1h"]), cf(r.VsBtc["4h"]), cf(r.VsBtc["24h"]),
 			cf(r.Beta), cf(r.Alpha), cf(r.Presence), cf(r.Stay), cf(r.Corr),
 			cf(r.Depth01), cf(r.Depth05), cf(r.Depth1), cf(r.Imb), cf(r.Spread),
-			cf(r.DO.Dist), cf(r.WO.Dist), cf(r.MO.Dist), cf(r.MA50.Dist), cf(r.MA100.Dist), cf(r.MA200.Dist))
+			cf(r.DO.Dist), cf(r.WO.Dist), cf(r.MO.Dist), cf(r.MA50.Dist), cf(r.MA100.Dist), cf(r.MA200.Dist),
+			string(r.Class), r.Sector, cf(r.Mcap))
 	}
 }
 
@@ -302,3 +304,43 @@ func (s *Store) LoadOI(ctx context.Context, since time.Time) ([]OIPoint, error) 
 
 // ErrNoStore is returned by helpers when the store is nil.
 var ErrNoStore = errors.New("store: not configured")
+
+// SaveAssets implements meta.Cache: one row per symbol, newest wins.
+func (s *Store) SaveAssets(ctx context.Context, assets []meta.Asset) error {
+	b, err := s.conn.PrepareBatch(ctx, "INSERT INTO assets")
+	if err != nil {
+		return err
+	}
+	for _, a := range assets {
+		if err := b.Append(a.Symbol, a.ID, a.Name, clean(a.Mcap), clean(a.FDV), uint32(max(a.Rank, 0)), a.Sector, a.Updated); err != nil {
+			return err
+		}
+	}
+	return b.Send()
+}
+
+// LoadAssets implements meta.Cache.
+func (s *Store) LoadAssets(ctx context.Context) ([]meta.Asset, error) {
+	rows, err := s.conn.Query(ctx, "SELECT symbol, cg_id, name, mcap, fdv, rank, sector, updated FROM assets FINAL")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []meta.Asset
+	for rows.Next() {
+		var a meta.Asset
+		var rank uint32
+		if err := rows.Scan(&a.Symbol, &a.ID, &a.Name, &a.Mcap, &a.FDV, &rank, &a.Sector, &a.Updated); err != nil {
+			return nil, err
+		}
+		a.Rank = int(rank)
+		if a.Mcap == 0 {
+			a.Mcap = math.NaN()
+		}
+		if a.FDV == 0 {
+			a.FDV = math.NaN()
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}

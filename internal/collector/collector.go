@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"screener/internal/meta"
 	"screener/internal/metrics"
 	"screener/internal/okx"
 )
@@ -36,6 +37,13 @@ type Config struct {
 	Flow            bool          // use the WebSocket stream (tickers, mark, index, OI, funding, trades)
 	WSPerConn       int           // instruments per WebSocket connection, default 200
 	ComputeEvery    time.Duration // row recompute period with the stream on, default 1s
+	Assets          AssetSource   // market cap / sector resolver for crypto rows; nil = off
+}
+
+// AssetSource answers market cap and sector for a venue base symbol
+// (implemented by meta.Service).
+type AssetSource interface {
+	Lookup(symbol string) (meta.Asset, bool)
 }
 
 func (c Config) withDefaults() Config {
@@ -941,6 +949,25 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 		oiUsd = st.oi.OICcy * last
 	}
 	r.OI = F(oiUsd)
+
+	// Asset class and metadata
+	r.Class = st.inst.AssetClass()
+	r.Mcap, r.FDV, r.McapRank, r.VolMcap, r.OIMcap = F(math.NaN()), F(math.NaN()), F(math.NaN()), F(math.NaN()), F(math.NaN())
+	if c.cfg.Assets != nil && r.Class == okx.ClassCrypto {
+		if a, ok := c.cfg.Assets.Lookup(st.inst.Base); ok {
+			r.Name, r.Sector = a.Name, a.Sector
+			r.Mcap, r.FDV = F(a.Mcap), F(a.FDV)
+			if a.Rank > 0 {
+				r.McapRank = F(float64(a.Rank))
+			}
+			if a.Mcap > 0 {
+				r.VolMcap = F(vol24 / a.Mcap)
+				if oiUsd > 0 {
+					r.OIMcap = F(oiUsd / a.Mcap)
+				}
+			}
+		}
+	}
 	r.OIVol = F(math.NaN())
 	if vol24 > 0 && oiUsd > 0 {
 		r.OIVol = F(oiUsd / vol24)
@@ -1109,4 +1136,22 @@ func (c *Collector) Health() Health {
 		h.Coverage[k] = v
 	}
 	return h
+}
+
+// CryptoSymbols returns the distinct base symbols of the crypto instruments in
+// the universe, for the metadata resolver.
+func (c *Collector) CryptoSymbols() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	seen := map[string]bool{}
+	out := make([]string, 0, len(c.states))
+	for _, st := range c.states {
+		if st.inst.AssetClass() != okx.ClassCrypto || seen[st.inst.Base] {
+			continue
+		}
+		seen[st.inst.Base] = true
+		out = append(out, st.inst.Base)
+	}
+	sort.Strings(out)
+	return out
 }

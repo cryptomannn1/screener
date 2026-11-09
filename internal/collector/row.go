@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"screener/internal/metrics"
+	"screener/internal/okx"
 )
 
 // F is a float that serialises NaN as null, so a metric that cannot be
@@ -39,6 +40,17 @@ type Row struct {
 	Settle string `json:"settle"` // USDT | USDC
 	Lever  F      `json:"lev"`
 	Listed F      `json:"listed"` // days since listing
+
+	// Asset: class from the venue; the rest from the metadata resolver,
+	// crypto only (null / "" for stocks, indices and commodities).
+	Class    okx.Class `json:"class"`          // crypto | stock | premarket | commodity | other
+	Name     string    `json:"name,omitempty"` // project name
+	Sector   string    `json:"sector"`         // one of meta.Sectors, Other, or "" when unknown
+	Mcap     F         `json:"mcap"`           // market capitalisation, USD
+	FDV      F         `json:"fdv"`            // fully diluted valuation, USD
+	McapRank F         `json:"mcapRank"`       // market-cap rank
+	VolMcap  F         `json:"volMcap"`        // vol24 / mcap (daily turnover of the cap)
+	OIMcap   F         `json:"oiMcap"`         // oi / mcap
 
 	// Price
 	Last  F `json:"last"`

@@ -178,6 +178,8 @@ func (c *Client) Instruments(ctx context.Context, instType string) ([]Instrument
 		Lever     string `json:"lever"`
 		ListTime  string `json:"listTime"`
 		State     string `json:"state"`
+		Category  string `json:"instCategory"`
+		RuleType  string `json:"ruleType"`
 	}
 	q := url.Values{"instType": {instType}}
 	if err := c.get(ctx, c.limPublic, "/api/v5/public/instruments", q, &raw); err != nil {
@@ -199,6 +201,7 @@ func (c *Client) Instruments(ctx context.Context, instType string) ([]Instrument
 			ID: r.InstID, Type: r.InstType, Uly: r.Uly, Base: base, SettleCcy: r.SettleCcy,
 			CtVal: f(r.CtVal), CtValCcy: r.CtValCcy, CtType: r.CtType, TickSz: f(r.TickSz),
 			LotSz: f(r.LotSz), Lever: f(r.Lever), ListTime: ms(r.ListTime), State: r.State,
+			Category: r.Category, RuleType: r.RuleType,
 		})
 	}
 	return out, nil

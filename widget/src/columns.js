@@ -14,6 +14,7 @@ export const GROUPS = [
   'Price',
   'Volume',
   'Open interest',
+  'Capitalisation',
   'Funding',
   'Volatility',
   'Flow',
@@ -22,6 +23,9 @@ export const GROUPS = [
   'Order book',
   'Listing',
 ]
+
+/** Venue asset classes (`row.class`) as labels. */
+export const CLASS_LABEL = { crypto: 'Crypto', stock: 'Stock', premarket: 'Pre-market', commodity: 'Commodity', other: 'Other' }
 
 const field = (name) => (row) => row[name] ?? null
 const perPeriod = (name) => (row, ctx) => row[name]?.[ctx.period] ?? null
@@ -65,6 +69,17 @@ export const COLUMNS = [
     label: '24h',
     def: true,
     title: 'Last 24 hours of hourly closes against the price 24 hours ago: green above it, red below.',
+  },
+  {
+    key: 'sector',
+    group: 'Instrument',
+    label: 'Sector',
+    def: true,
+    title:
+      'Crypto sector from CoinGecko categories, one per coin (Stable, Meme, Exchange, L2, L1, AI, RWA, DePIN, Gaming, Privacy, DeFi, Infra, Other). Stocks, indices, commodities and pre-market contracts show their asset class.',
+    // Text column: drawn as a label, not sortable or filterable in the widget yet.
+    text: (row) => row.sector || (row.class && row.class !== 'crypto' ? CLASS_LABEL[row.class] ?? row.class : null),
+    tone: (row) => (row.sector ? '' : 'mid'),
   },
   {
     key: 'mark',
@@ -182,6 +197,56 @@ export const COLUMNS = [
     title: 'Open interest in USD.',
     value: field('oi'),
     format: f.usd,
+  },
+  {
+    key: 'mcap',
+    group: 'Capitalisation',
+    label: 'Mcap',
+    unit: 'usd',
+    def: true,
+    title: 'Market capitalisation in USD (crypto only, CoinGecko, refreshed every 30 minutes).',
+    value: field('mcap'),
+    format: f.usd,
+  },
+  {
+    key: 'fdv',
+    group: 'Capitalisation',
+    label: 'FDV',
+    unit: 'usd',
+    def: false,
+    title: 'Fully diluted valuation in USD.',
+    value: field('fdv'),
+    format: f.usd,
+  },
+  {
+    key: 'mcapRank',
+    group: 'Capitalisation',
+    label: 'Rank',
+    unit: 'num',
+    def: false,
+    title: 'Market-cap rank among all coins.',
+    value: field('mcapRank'),
+    format: f.rank,
+  },
+  {
+    key: 'volMcap',
+    group: 'Capitalisation',
+    label: 'Vol/Mcap',
+    unit: 'pct',
+    def: false,
+    title: 'Volume 24h as a share of market cap: how much of the cap turns over per day.',
+    value: field('volMcap'),
+    format: (v) => f.pct(v, 1, false),
+  },
+  {
+    key: 'oiMcap',
+    group: 'Capitalisation',
+    label: 'OI/Mcap',
+    unit: 'pct',
+    def: false,
+    title: 'Open interest as a share of market cap: leverage sitting on the coin.',
+    value: field('oiMcap'),
+    format: (v) => f.pct(v, 1, false),
   },
   {
     key: 'oiDP',

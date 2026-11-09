@@ -88,3 +88,7 @@
 .scr-input:hover {
   border-color: var(--primary-accent);
 }
+
+/* Text column (sector / asset class): a label, muted when it is only the class. */
+.scr-text { white-space: nowrap; }
+.scr-text.-mid { color: var(--text-mid-emphasis); }
