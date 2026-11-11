@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"screener/internal/meta"
 	"screener/internal/okx"
 	"screener/internal/store"
+	"screener/internal/venue"
 )
 
 const version = "0.1.0"
@@ -55,6 +57,11 @@ func main() {
 	cgPages := fs.Int("cg-pages", 8, "market-cap pages of 250 coins to scan when matching symbols")
 	cgMcapEvery := fs.Duration("cg-mcap", 30*time.Minute, "market-cap refresh period")
 	cgSectorsEvery := fs.Duration("cg-sectors", 24*time.Hour, "sector refresh period")
+	venuesOn := fs.Bool("venues", true, "poll Binance and Bybit and serve GET /assets: one row per asset over the three exchanges")
+	bnBase := fs.String("binance-base", "", "Binance USDⓈ-M futures API base URL; empty = https://fapi.binance.com")
+	bbBase := fs.String("bybit-base", "", "Bybit v5 API base URL; empty = https://api.bybit.com")
+	venueTickers := fs.Duration("venue-tickers", 5*time.Second, "Binance and Bybit REST tickers period when their stream is off or down")
+	venueStreams := fs.Bool("venue-streams", true, "read Binance and Bybit tickers and mark prices over WebSocket (about once a second); false = REST polling only")
 	applyEnv(fs)
 	_ = fs.Parse(os.Args[1:])
 
@@ -108,9 +115,29 @@ func main() {
 		seedCandles(ctx, st, col, log)
 		seedFlow(ctx, st, col, log)
 	}
-	if assets != nil {
+	// Binance and Bybit next to OKX: one row per asset over the three exchanges.
+	var venues *venue.Service
+	if *venuesOn {
+		var md venue.MetaSource
+		if assets != nil {
+			md = assets
+		}
+		venues = venue.New(venue.Config{BinanceURL: *bnBase, BybitURL: *bbBase, TickersEvery: *venueTickers, NoStreams: !*venueStreams}, col, md, log)
+		venues.Prime(ctx)
 		go func() {
-			if err := assets.Run(ctx, col.CryptoSymbols); err != nil && !errors.Is(err, context.Canceled) {
+			if err := venues.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("venues", "err", err)
+			}
+		}()
+	}
+	if assets != nil {
+		// The resolver covers the coins of every exchange, not only OKX's.
+		symbols := col.CryptoSymbols
+		if venues != nil {
+			symbols = func() []string { return mergeSorted(col.CryptoSymbols(), venues.CryptoBases()) }
+		}
+		go func() {
+			if err := assets.Run(ctx, symbols); err != nil && !errors.Is(err, context.Canceled) {
 				log.Warn("meta loop", "err", err)
 			}
 		}()
@@ -119,6 +146,9 @@ func main() {
 	handler := api.New(col, st, version, *static)
 	if assets != nil {
 		handler.WithMeta(assets)
+	}
+	if venues != nil {
+		handler.WithVenues(venues)
 	}
 	srv := &http.Server{Addr: *addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 	go func() {
@@ -221,6 +251,22 @@ func applyEnv(fs *flag.FlagSet) {
 			}
 		}
 	})
+}
+
+// mergeSorted returns the distinct strings of both lists, sorted.
+func mergeSorted(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, list := range [][]string{a, b} {
+		for _, x := range list {
+			if !seen[x] {
+				seen[x] = true
+				out = append(out, x)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func splitList(s string) []string {

@@ -1,14 +1,22 @@
 # screener
 
-Market-data service for the Scope360 terminal screener. It polls the OKX
-public API for the whole linear-swap universe (about 520 USDT / USDC
-perpetuals), keeps the latest state of every instrument, computes the
-screener metrics and serves them as one JSON snapshot. No API keys: every
-endpoint used is public.
+Market-data service for the Scope360 terminal screener. It reads the public
+APIs of OKX, Binance and Bybit for their linear USDT / USDC perpetuals (about
+930 assets: coins, stocks and indices, commodities, FX), keeps the latest
+state of every instrument, computes the screener metrics and serves them as
+JSON: one row per OKX instrument (`GET /screener`) and one row per asset over
+the three exchanges (`GET /assets`). No API keys: every endpoint used is
+public.
 
-The widget that renders the rows lives with the terminal; the UI contract is
-the prototype in the session folder (`sessions/active/2026-10-31_016_…/screener-v1.html`)
-and the wire contract is [`api/screener.md`](api/screener.md).
+- UI contract: the prototype in [`prototype/`](prototype/), one HTML page with
+  a clean table over the three exchanges, filter phrases and ready tabs.
+- Wire contract: [`api/screener.md`](api/screener.md).
+- Vue widget for the terminal: [`widget/`](widget/). It still follows the
+  previous, single-exchange prototype.
+- Where the project stands and what comes next: [`PLAN.md`](PLAN.md) (in Russian).
+
+Quick start: `go run ./cmd/screener -static prototype`, then open
+http://localhost:8090/ui/screener-v2.html.
 
 ## Architecture
 
@@ -23,7 +31,10 @@ OKX WS  trades     ──►  internal/okx/ws     trade stream over a few socket
                         internal/metrics    pure arithmetic (ATR, RV, regime, beta/corr/alpha/presence/stay, depth bands)
                               │
                               ▼
-                        internal/api        GET /screener, /stream (SSE), /instruments, /health, /ui/ (static)
+                        internal/api        GET /screener, /assets, /stream (SSE), /instruments, /health, /ui/ (static)
+                              ▲
+Binance, Bybit WS+REST ► internal/venue     tickers, funding, open interest, candles of the two exchanges;
+                                            folds them with the collector's OKX rows into one row per asset
 ```
 
 Poll loops (all per IP limits from the OKX docs, kept at ~90 %):
@@ -40,6 +51,25 @@ Poll loops (all per IP limits from the OKX docs, kept at ~90 %):
 | `daily` | `market/candles bar=1Dutc` | sweep every 15 min | 230 bars first (MA 200), then last 3 |
 | `books` | `market/books sz=400`, `books-full sz=5000` when 400 levels stop short of ±1 % | continuous sweep, ≥ 30 s | depth bands ±0.1 / 0.5 / 1 %, spread, imbalance; a band beyond the snapshot is `null` |
 | `meta` | CoinGecko `coins/markets` (top 2000 by cap, then the categories of a fixed sector taxonomy) | caps every 30 min, sectors every 24 h; one call per 13 s without a key | `mcap`, `fdv`, `mcapRank`, `sector`, `name` for crypto rows; the asset `class` itself comes from the venue's `instCategory` (crypto / stock / commodity / pre-market) |
+
+Binance and Bybit (`internal/venue`, public WebSocket streams and REST, no keys):
+
+| loop | source | cadence | covers |
+|------|--------|---------|--------|
+| `universe` | Binance `exchangeInfo` + `fundingInfo`, Bybit `instruments-info` | 30 min | trading linear USDT / USDC perpetuals, asset class, funding interval |
+| stream `bn` | WS `!ticker@arr` + `!markPrice@arr@1s` on one socket (`wss://fstream.binance.com/market/stream`) | live, once a second | price, 24 h change, volume of every symbol that traded; mark price and funding rate of every symbol |
+| stream `bb` | WS `tickers.<symbol>` for every instrument (`wss://stream.bybit.com/v5/public/linear`, 2 sockets for ~900 symbols) | live, snapshot then deltas | price, mark, 24 h change, volume, open interest, funding and its interval |
+| `binance.tickers` | `ticker/24hr` (all symbols, weight 40) | 60 s while the stream is healthy, 5 s without it | REST safety net: the symbols the stream has not mentioned, delisted ones dropped |
+| `binance.premium` | `premiumIndex` (all symbols, weight 10) | 60 s while the stream is healthy, 30 s without it | REST safety net for mark price and funding rate |
+| `binance.oi` | `openInterest?symbol=` | continuous, 4 requests / s, busiest first | open interest; there is no bulk endpoint, a pass takes a little over 3 min |
+| `bybit.tickers` | `tickers?category=linear` | 60 s while the stream is healthy, 5 s without it | REST safety net for the same figures |
+| `candles` | Bybit `kline`, else Binance `klines` | 200 hourly and 240 daily bars once, then the last few every 10 / 30 min and right after each hour and UTC day turns | price metrics of the assets OKX does not list |
+
+A stream counts as healthy while its sockets are up and spoke within the last 5 s; a stream that went quiet hands
+the feed back to REST until it returns. Sockets reconnect by themselves with a backoff of 1 to 30 s. Bybit caps
+the topic names of one connection at 21,000 characters, so its symbols are spread over connections of at most
+12,000; a changed symbol set re-subscribes. With the streams on the Binance weight stays near 300 of the 2400 per
+minute allowed per IP (near 800 on REST alone).
 
 The benchmark (`-benchmark`, default `BTC-USDT-SWAP`) is always swept first so
 the strength block compares against fresh BTC returns.
@@ -58,7 +88,7 @@ curl -s localhost:8090/health | jq .
 curl -s 'localhost:8090/screener?symbols=BTC,ETH' | jq '.rows[0]'
 curl -s 'localhost:8090/screener?sort=chg&period=4h&limit=10' | jq '.rows[] | [.symbol, .chg["4h"], .vol24]'
 curl -N 'localhost:8090/stream?symbols=BTC,ETH'                      # SSE, one `rows` event per recompute
-go run ./cmd/screener -static ../sessions/active/2026-10-31_016_screener-prototype   # then open /ui/screener-v1.html
+go run ./cmd/screener -static prototype     # the UI prototype: open /ui/screener-v2.html
 ```
 
 Flags double as environment variables (`-ch-ttl-days` → `CH_TTL_DAYS`):
@@ -78,6 +108,10 @@ Flags double as environment variables (`-ch-ttl-days` → `CH_TTL_DAYS`):
 | `-clickhouse` | — | DSN `clickhouse://user:pass@host:9000/db`; empty = no store |
 | `-ch-ttl-days` | `180` | retention of `ticks`, `depth`, `rows` (candles keep 730 days) |
 | `-ch-optional` | `false` | run in memory if the store fails to open |
+| `-venues` | `true` | poll Binance and Bybit and serve `GET /assets`: one row per asset over the three exchanges |
+| `-venue-streams` | `true` | read Binance and Bybit tickers and mark prices over WebSocket, about once a second; `false` = REST polling only |
+| `-venue-tickers` | `5s` | Binance and Bybit REST tickers period when their stream is off or down |
+| `-binance-base`, `-bybit-base` | production | API base URLs of the two exchanges |
 | `-meta` | `true` | resolve market cap / FDV / sector for crypto rows from CoinGecko |
 | `-cg-key` | — | CoinGecko demo or pro key; without it the public limit applies (one call per 13 s, first full pass ≈ 8 min, cached in the store) |
 | `-cg-base` | `https://api.coingecko.com/api/v3` | API base; `https://pro-api.coingecko.com/api/v3` with a pro key |
@@ -111,13 +145,20 @@ month open, daily MA 50 / 100 / 200), SSE push, ClickHouse store with restart
 seeding, REST + SSE API, static `/ui/`.
 See `widget/` for the Vue widget and `cmd/backfill` + `cmd/backtest` for the
 strength-vs-BTC study.
+Three exchanges: `GET /assets` gives one row per asset over OKX, Binance and
+Bybit with a block per exchange (price, 24 h change, volume, open interest,
+funding) and the asset-level price metrics; tickers, multipliers and asset
+classes are brought to one form (`internal/venue`). Prices of all three
+exchanges move once a second: OKX, Binance and Bybit are read over their
+public WebSocket streams, REST is the safety net.
 
 Next:
 
 1. Liquidations (OKX `public/liquidation-orders`) and long/short ratio
    (`rubik`, fine from a server) as columns.
 2. 5m / 15m periods once the trade stream and 5m candles are stored long enough.
-3. Second venue behind the same row contract.
+3. Trades, order books and open-interest history from Binance and Bybit, so that flow, depth and OI-change
+   metrics exist for the assets OKX does not list; store the two exchanges' data in ClickHouse (now in memory).
 4. Auth / rate limiting in front of the API for a shared dev host.
 
 ## Widget

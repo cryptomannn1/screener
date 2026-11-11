@@ -60,10 +60,11 @@ type Row struct {
 	Bid   F `json:"bid"`
 	Ask   F `json:"ask"`
 
-	Chg    PerPeriod `json:"chg"`   // last / close N hours ago − 1
-	Chg1d  F         `json:"chg1d"` // vs yesterday's UTC close
-	Chg7d  F         `json:"chg7d"`
-	Chg30d F         `json:"chg30d"`
+	Chg     PerPeriod `json:"chg"`     // last / close N hours ago − 1
+	ChgRoll F         `json:"chgRoll"` // last / the exchange's own rolling 24 h open − 1: the figure its ticker shows
+	Chg1d   F         `json:"chg1d"`   // vs yesterday's UTC close
+	Chg7d   F         `json:"chg7d"`
+	Chg30d  F         `json:"chg30d"`
 
 	// Volume (quote currency)
 	Vol24 F         `json:"vol24"`

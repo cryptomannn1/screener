@@ -13,6 +13,7 @@ import (
 	"screener/internal/collector"
 	"screener/internal/meta"
 	"screener/internal/store"
+	"screener/internal/venue"
 )
 
 // Server is the HTTP layer.
@@ -22,12 +23,21 @@ type Server struct {
 	mux     *http.ServeMux
 	start   time.Time
 	version string
-	meta    *meta.Service // may be nil
+	meta    *meta.Service  // may be nil
+	venues  *venue.Service // may be nil
 }
 
 // WithMeta exposes the metadata resolver's state in /health.
 func (s *Server) WithMeta(m *meta.Service) *Server {
 	s.meta = m
+	return s
+}
+
+// WithVenues adds the three-exchange view: GET /assets, the assets view of
+// /stream and the venues block of /health.
+func (s *Server) WithVenues(v *venue.Service) *Server {
+	s.venues = v
+	s.mux.HandleFunc("GET /assets", s.handleAssets)
 	return s
 }
 
@@ -156,8 +166,9 @@ func (s *Server) handleScreener(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleStream: GET /stream — Server-Sent Events. One `rows` event with the
-// same payload as /screener every time the collector recomputes (about every
-// 5 s), a comment line every 15 s as keep-alive. Same query parameters.
+// same payload as /screener every time the collector recomputes (about once a
+// second), a comment line every 15 s as keep-alive. Same query parameters.
+// With view=assets the events are `assets`, with the payload of /assets.
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
@@ -172,16 +183,28 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var lastTS int64
 	send := func() bool {
-		resp, ok := s.snapshot(q)
-		if !ok || resp.TS == lastTS {
-			return false
+		var b []byte
+		var err error
+		event := "rows"
+		if q.Get("view") == "assets" && s.venues != nil {
+			resp := s.assets(q)
+			if resp.TS == lastTS {
+				return false
+			}
+			lastTS, event = resp.TS, "assets"
+			b, err = json.Marshal(resp)
+		} else {
+			resp, ok := s.snapshot(q)
+			if !ok || resp.TS == lastTS {
+				return false
+			}
+			lastTS = resp.TS
+			b, err = json.Marshal(resp)
 		}
-		lastTS = resp.TS
-		b, err := json.Marshal(resp)
 		if err != nil {
 			return false
 		}
-		_, _ = w.Write([]byte("event: rows\ndata: "))
+		_, _ = w.Write([]byte("event: " + event + "\ndata: "))
 		_, _ = w.Write(b)
 		_, _ = w.Write([]byte("\n\n"))
 		fl.Flush()
@@ -273,6 +296,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	if s.meta != nil {
 		resp["meta"] = s.meta.Health()
 	}
+	if s.venues != nil {
+		resp["venues"] = s.venues.Health()
+	}
 	code := http.StatusOK
 	if h.Rows == 0 {
 		resp["status"] = "warming"
@@ -284,6 +310,60 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		resp["store"] = nil
 	}
 	writeJSON(w, code, resp)
+}
+
+// AssetsResponse is the payload of GET /assets and of the assets view of
+// /stream: one row per asset over OKX, Binance and Bybit.
+type AssetsResponse struct {
+	TS     int64         `json:"ts"`
+	Count  int           `json:"count"`
+	Venues []string      `json:"venues"`
+	Assets []venue.Asset `json:"assets"`
+}
+
+// assets builds the response. Query: ex=okx,bn,bb keeps only those exchanges
+// (an asset none of them lists is dropped); class=crypto,stock,commodity,fx.
+func (s *Server) assets(q map[string][]string) AssetsResponse {
+	get := func(k string) string {
+		if v := q[k]; len(v) > 0 {
+			return v[0]
+		}
+		return ""
+	}
+	list, at := s.venues.Assets()
+	ex, class := listSet(get("ex")), listSet(get("class"))
+	resp := AssetsResponse{TS: at.UnixMilli(), Venues: venue.Venues}
+	if len(ex) == 0 && len(class) == 0 {
+		resp.Assets, resp.Count = list, len(list)
+		return resp
+	}
+	out := make([]venue.Asset, 0, len(list))
+	for _, a := range list {
+		if len(class) > 0 && !class[a.Cls] {
+			continue
+		}
+		if len(ex) > 0 {
+			v := make(map[string]venue.Block, len(a.V))
+			for k, b := range a.V {
+				if ex[k] {
+					v[k] = b
+				}
+			}
+			if len(v) == 0 {
+				continue
+			}
+			a.V = v
+		}
+		out = append(out, a)
+	}
+	resp.Assets, resp.Count = out, len(out)
+	return resp
+}
+
+// handleAssets: GET /assets.
+func (s *Server) handleAssets(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	writeJSONPretty(w, http.StatusOK, s.assets(q), q.Get("pretty") != "")
 }
 
 // listSet turns "a,B, c" into a lower-case set; empty input gives an empty set.

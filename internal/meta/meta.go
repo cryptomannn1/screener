@@ -139,6 +139,7 @@ type Service struct {
 	mu       sync.RWMutex
 	assets   map[string]Asset // by venue symbol
 	symbols  []string
+	seen     map[string]bool // symbols that went through a market-cap pass in this run
 	health   Health
 	lastCall time.Time
 }
@@ -168,6 +169,7 @@ func New(cfg Config, log *slog.Logger, cache Cache) *Service {
 		cfg: cfg, log: log, cache: cache,
 		http:   &http.Client{Timeout: 20 * time.Second},
 		assets: map[string]Asset{},
+		seen:   map[string]bool{},
 		health: Health{Sectors: map[string]int{}},
 	}
 }
@@ -248,10 +250,28 @@ func (s *Service) Run(ctx context.Context, symbols func() []string) error {
 		s.health.Symbols = len(syms)
 		mcapDue := time.Since(time.UnixMilli(s.health.McapAt)) >= s.cfg.McapEvery
 		secDue := time.Since(time.UnixMilli(s.health.SectorsAt)) >= s.cfg.SectorsEvery
+		fresh := 0
+		for _, x := range syms {
+			if _, ok := s.assets[x]; !ok && !s.seen[x] {
+				fresh++
+			}
+		}
+		if fresh*10 > len(syms) {
+			// The universe grew by a lot (another exchange was switched on):
+			// resolve it now instead of waiting for the schedule. The handful
+			// of symbols that never match stays under this threshold.
+			mcapDue, secDue = true, true
+		}
 		s.mu.Unlock()
 		if mcapDue {
 			if err := s.refreshMcap(ctx, syms); err != nil && !errors.Is(err, context.Canceled) {
 				s.fail(err)
+			} else if err == nil {
+				s.mu.Lock()
+				for _, x := range syms {
+					s.seen[x] = true
+				}
+				s.mu.Unlock()
 			}
 		}
 		if secDue {

@@ -942,6 +942,10 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 	}
 	vol24 := st.tk.VolCcy24h * last
 	r.Vol24 = F(vol24)
+	r.ChgRoll = F(math.NaN())
+	if st.tk.Open24h > 0 && last > 0 {
+		r.ChgRoll = F(last/st.tk.Open24h - 1)
+	}
 
 	// OI
 	oiUsd := st.oi.OIUsd

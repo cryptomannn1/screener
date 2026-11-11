@@ -1,4 +1,4 @@
-# screener wire contract — v0.4
+# screener wire contract — v0.5
 
 Plain HTTP GET on `-addr` (default `:8090`), JSON, `Access-Control-Allow-Origin: *`,
 `OPTIONS` answers 204. Timestamps are Unix milliseconds. Prices in the quote
@@ -58,6 +58,7 @@ keyed by `periods`.
 | `last`, `mark`, `index`, `bid`, `ask` | prices |
 | `basis` | `mark / index − 1` |
 | `chg` | `{"1h","4h","24h"}`: `last / close N hours ago − 1` (1H candles) |
+| `chgRoll` | `last / open24h − 1`: the venue's own rolling 24 h change, the figure its ticker shows; `chg["24h"]` is measured from an hourly close and can differ by the move inside that hour (v0.5) |
 | `chg1d`, `chg7d`, `chg30d` | vs the UTC daily close 1 / 7 / 30 days ago |
 | `vol24` | 24 h quote volume (`volCcy24h × last`) |
 | `volx7` | `vol24 / average quote volume of the last 7 full UTC days` |
@@ -107,10 +108,78 @@ const es = new EventSource('http://localhost:8090/stream?limit=200');
 es.addEventListener('rows', e => render(JSON.parse(e.data)));
 ```
 
+## `GET /assets` (v0.5)
+
+One row per **asset** over OKX, Binance and Bybit (linear USDT / USDC
+perpetuals on each). `/screener` stays as it is: one row per OKX instrument.
+
+| param   | default | notes |
+|---------|---------|-------|
+| `ex`    | all     | comma list of exchanges to keep: `okx`, `bn`, `bb`; an asset none of them lists is dropped |
+| `class` | all     | comma list of `crypto`, `stock`, `commodity`, `fx` |
+| `pretty`| —       | any value indents the JSON |
+
+```json
+{
+  "ts": 1794312139763, "count": 931, "venues": ["okx", "bn", "bb"],
+  "assets": [{
+    "k": "c:BTC", "s": "BTC", "n": "Bitcoin", "cls": "crypto", "sec": "L1",
+    "mcap": 1491288915192, "rank": 1,
+    "v": {
+      "okx": {"p": 74348.4, "c": -0.0004, "vol": 4658891348, "oi": 2653856813, "f": 0.000042, "fi": 8},
+      "bn":  {"p": 74355.7, "c": -0.0002, "vol": 11404719819, "oi": 9158000000, "f": 0.000088, "fi": 8},
+      "bb":  {"p": 74356.1, "c": -0.0002, "vol": 3850671351, "oi": 5245193096, "f": 0.000055, "fi": 8}
+    },
+    "m": {"spark": […], "chg": {"1h": -0.0004, "4h": -0.0046}, "chg7d": -0.05, "chg30d": -0.10,
+          "volx7": 1.12, "volx": {…}, "oiD": {…}, "atr": 0.0051, "regime": 0.69,
+          "takerBuy": {…}, "delta": {…}, "tape": 284.2, "vsBtc": {"1h": 0, "4h": 0},
+          "beta": 1, "corr": 1, "spread": 0.013, "depth05": 112641946,
+          "lv": {"do": 75319.9, "wo": 74818.1, "mo": 77520.9, "ma50": 81693.6, "ma100": 77267.0, "ma200": 73167.7}}
+  }]
+}
+```
+
+Rows come busiest first (24 h volume over all exchanges).
+
+| field | meaning |
+|-------|---------|
+| `k` | asset id: the common ticker with a class prefix, `c:` for coins and `t:` for everything else. The prefix is part of the identity: the same ticker can be a coin on one exchange and a stock on another (`BB`, `CAT`, `ON`, `QNT`) |
+| `s` | common ticker. Exchange spellings are brought to one form: contract multipliers are stripped (`1000PEPE`, `1000000MOG`, `1MBABYDOGE`, `SHIB1000` → price of one coin), Bybit's `STOCK` suffix is dropped (`AMDSTOCK` → `AMD`), `COPPER` = `XCU`, `NATGAS` = `NG`, `PAYP` = `PYPL` |
+| `n` | name, when known (coins: from the metadata resolver) |
+| `cls` | `crypto`, `stock` (equities, ETFs, equity indices, pre-IPO), `commodity`, `fx`. From OKX `instCategory`, Binance `underlyingType`, Bybit `symbolType` |
+| `sec` | coins: the resolver's sector, else a sector from Binance's tags, else `Other`; other classes: `Stock`, `ETF`, `Index`, `Pre-IPO`, `Commodity`, `FX` |
+| `mcap`, `rank` | market cap in USD and its rank; coins only |
+| `v` | one block per exchange that lists the asset, keyed `okx`, `bn`, `bb` |
+| `v.*.p` | last price of **one coin**, USD |
+| `v.*.c` | the exchange's rolling 24 h change, fraction |
+| `v.*.vol`, `v.*.oi` | 24 h volume and open interest in USD. The USDT and USDC contracts of the asset on that exchange add up; price, change and funding are those of the busier contract. `oi` is `null` until read: Binance publishes open interest one symbol per request, a full pass takes a few minutes |
+| `v.*.f`, `v.*.fi` | funding rate per interval and the interval in hours. Intervals differ between exchanges and symbols (1, 4, 8 h): compare rates as `f × 8 / fi` |
+| `m` | asset-level metrics, the same names and formulas as in the `/screener` row (`chg` carries `1h` and `4h`; the 24 h change is per exchange in `v`). `lv` holds the level **prices**; the distance is `price / level − 1` with the price of the exchange you show |
+
+Where `m` comes from: for an asset OKX lists, from its OKX row (all metrics).
+For the others, from the hourly and daily candles of its busiest contract on
+Bybit, else Binance, with the same formulas; `vsBtc`, `beta`, `corr` use BTC
+on that exchange. Metrics that need trades, the order book or open-interest
+history (`takerBuy`, `delta`, `tape`, `spread`, `depth05`, `oiD`) are `null` /
+`{}` for those assets until the service collects them from Binance and Bybit.
+
+The service does not add the exchanges up: which of them a table shows is the
+reader's choice. The prototype sums `vol` and `oi`, takes price and change
+from the busiest of the chosen exchanges and weights funding (brought to 8 h)
+by open interest.
+
+`GET /stream?view=assets` pushes the same payload as events named `assets`,
+about once a second; `ex` and `class` apply.
+
+Freshness: `v.*.p`, `c`, `vol` and `f` of all three exchanges move about once a
+second (public WebSocket streams); `v.bb.oi` too. `v.bn.oi` is as old as the
+per-symbol pass over Binance (a few minutes). If an exchange's stream is down
+its figures fall back to REST polling every 5 s; `/health` shows which.
+
 ## `GET /ui/…`
 
 When the service runs with `-static <dir>`, that directory is served here
-(the prototype page: `/ui/screener-v1.html`). Same origin as the API, so the
+(the prototype page: `-static prototype`, then `/ui/screener-v2.html`). Same origin as the API, so the
 page needs no CORS.
 
 ## `GET /instruments`
@@ -137,7 +206,18 @@ and `settleCcy` in `-settle` (default `USDT,USDC`), with `ctVal`, `tickSz`,
       "hourly":   {…}, "daily": {…}, "books": {…}
     }
   },
-  "store": {"written": 34902, "dropped": 0, "errors": 0, "queued": 0}   // null without -clickhouse
+  "store": {"written": 34902, "dropped": 0, "errors": 0, "queued": 0},  // null without -clickhouse
+  "venues": {                          // absent with -venues=false
+    "instruments": {"okx": 528, "bn": 794, "bb": 890},   // okx: assets on OKX; bn, bb: linear perpetuals
+    "assets": 931, "outsideOkx": 403,
+    "candles": 403,                    // assets outside OKX with hourly and daily candles loaded
+    "binanceOi": 794,                  // Binance symbols with an open-interest reading
+    "loops": {"universe": {…}, "binance.tickers": {…}, "binance.premium": {…}, "binance.oi": {…}, "bybit.tickers": {…}, "candles": {…}},
+    "streams": {                       // absent with -venue-streams=false
+      "bn": {"live": true, "conns": 1, "msgs": 5120, "updates": 412300, "lastMsgAt": 1794323235029, "reconnects": 0},
+      "bb": {"live": true, "conns": 2, "subscribed": 890, "msgs": 2551000, "updates": 610400, "lastMsgAt": 1794323235134, "reconnects": 0}
+    }                                  // live: every socket is up; updates: ticker rows applied; lastErr when a socket failed
+  }
 }
 ```
 
