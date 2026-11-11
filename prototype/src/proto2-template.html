@@ -1,0 +1,699 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Screener</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+/* Terminal kit: tokens and components copied from screener-v1.html */
+__KIT_CSS__
+
+__LAB2_CSS__
+
+/* ===== Lab 3: one clean table over three exchanges, three placements of the same controls ===== */
+.xg { width: 12px; height: 12px; flex: none; }
+.sym { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 104px; }
+.sym b { color: var(--text-high-emphasis); font-weight: 600; }
+.venues { display: inline-flex; gap: 4px; color: var(--icons-low-emphasis); }
+.vslot { display: block; width: 12px; height: 12px; }
+.trading-table tr:hover .venues { color: var(--icons-mid-emphasis); }
+
+/* A: four dropdown buttons of one kind, name then value */
+.btn.-dd { gap: 6px; font-weight: 400; }
+.btn.-dd .k { color: var(--text-mid-emphasis); }
+.btn.-dd .v { color: var(--text-high-emphasis); font-weight: 500; }
+.btn.-dd > svg { width: 12px; height: 12px; margin-left: -2px; color: var(--icons-mid-emphasis); }
+.pop__row .xg { color: var(--terminal-v2-muted); }
+.pop__row .box { color: var(--text-light); }
+.pop__row[aria-checked="true"] .box { background: var(--primary-accent); }
+.pop__row .tks { display: block; width: 12px; height: 12px; flex: none; color: var(--primary-accent); }
+.pop__row .tks svg { width: 12px; height: 12px; }
+.pop__row:disabled { opacity: .4; cursor: not-allowed; }
+.pop__row:disabled:hover { background: transparent; }
+.scr__filters .cnt { margin-left: auto; color: var(--text-mid-emphasis); }
+
+/* Exchanges as toggles (B panel, C bar) */
+.seg { flex-wrap: wrap; }
+.seg.-multi button { display: inline-flex; align-items: center; gap: 6px; }
+.seg.-multi button[aria-pressed="false"] { color: var(--text-low-emphasis); }
+
+/* Columns: what is in the table (drag, remove) next to what can be added */
+.cols { display: grid; grid-template-columns: 216px 380px; gap: 0 4px; align-items: start; max-width: calc(100vw - 32px); }
+.cols > div { min-width: 0; }
+.cols .cat { width: auto; }
+.cols .pop__foot { justify-content: flex-start; padding: 8px 4px 4px; }
+.btn.-ghost { border-color: transparent !important; }
+.cols .dl { max-height: min(60vh, 520px); overflow: auto; overscroll-behavior: contain; }
+@media (max-width: 680px) { .cols { grid-template-columns: minmax(0, 1fr); width: calc(100vw - 32px); } .cols .dl, .cols .cat__list { max-height: 32vh; } }
+.dl__n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl__row.-f { grid-template-columns: 12px minmax(0, 1fr) auto 22px; }
+.dl__row.-f .dl__x { grid-column: 4; }
+.dl__f { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 4px 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--terminal-v2-muted); white-space: nowrap; }
+.dl__f svg { width: 12px; height: 12px; }
+.dl__f:hover, .dl__f[aria-expanded="true"] { background: var(--dropdown-hover); color: var(--terminal-v2-text); }
+.dl__f.-on { background: var(--card-primary-background-light); color: var(--terminal-v2-text); font-weight: 500; }
+.dl__opts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 2px 8px 8px 28px; }
+.dl__opts .lbl { color: var(--terminal-v2-muted); margin-left: 4px; }
+.drawer { width: 372px; }
+.trading-table { min-width: 0; }
+@media (min-width: 900px) { .scr__body:has(> .drawer:not([hidden])) { flex-direction: row; } .scr__body > .drawer { position: static; flex: none; box-shadow: none; } }
+.drawer__sec { padding: 0 8px 2px; }
+.drawer .seg { background: var(--dropdown-hover); }
+.drawer .seg button[aria-pressed="true"] { background: var(--dropdown-background); color: var(--terminal-v2-text); }
+
+/* C: the condition of a column sits right under its name */
+.trading-table thead tr.frow th { top: 32px; height: 28px; cursor: default; }
+.fc { height: 20px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--text-low-emphasis); white-space: nowrap; }
+.fc:hover, .fc[aria-expanded="true"] { background: var(--card-neutral-background); color: var(--text-high-emphasis); }
+.fc.-on { background: var(--card-primary-background-light); color: var(--text-high-emphasis); font-weight: 500; }
+.fc.-clear { display: inline-flex; align-items: center; gap: 4px; }
+.fc.-clear svg { width: 10px; height: 10px; }
+.trading-table th.-end .fc { margin-right: -6px; }
+.trading-table th:not(.-end) .fc { margin-left: -6px; }
+
+/* ===== Prototype v2 ===== */
+.sym { justify-content: flex-start; gap: 8px; min-width: 0; }
+.sym b { min-width: 64px; max-width: 104px; overflow: hidden; text-overflow: ellipsis; }
+/* Column widths come from layout(): the number columns share the free width equally, so a few columns fill the widget,
+   more columns narrow down to their minimum, and only then the table scrolls sideways. */
+.trading-table table { table-layout: fixed; min-width: 0; }
+.trading-table th { overflow: hidden; text-overflow: ellipsis; }
+/* what a summed figure is made of, on hover */
+.tip { position: fixed; z-index: 90; display: grid; grid-template-columns: auto auto; gap: 4px 16px; align-items: center; padding: 8px 10px; border-radius: 8px; background: var(--dropdown-background); color: var(--terminal-v2-muted); box-shadow: var(--dropdown-shadow); pointer-events: none; white-space: nowrap; }
+.tip[hidden] { display: none; }
+.tip span { display: inline-flex; align-items: center; gap: 6px; }
+.tip b { color: var(--terminal-v2-text); font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.tip span.-lead { color: var(--terminal-v2-text); }
+.tip b.-dim { color: var(--terminal-v2-muted); font-weight: 400; }
+
+/* A condition as a phrase on the bar: column, operator, value, remove. The gaps between the parts show the bar through, no drawn lines. */
+.fp { display: inline-flex; align-items: stretch; gap: 1px; height: 28px; border-radius: 8px; overflow: hidden; flex: none; }
+.fp > * { display: inline-flex; align-items: center; height: 28px; padding: 0 8px; border: 0; background: var(--card-neutral-background); color: var(--text-mid-emphasis); white-space: nowrap; }
+.fp__n { color: var(--text-high-emphasis); font-weight: 500; }
+.fp__s:hover, .fp__s[aria-expanded="true"] { background: color-mix(in srgb, var(--text-high-emphasis) 14%, var(--card-neutral-background)); color: var(--text-high-emphasis); }
+.fp__s.-v { color: var(--text-high-emphasis); font-weight: 500; }
+.fp__s.-empty { color: var(--text-low-emphasis); }
+.fp__x { padding: 0 6px; color: var(--icons-mid-emphasis); }
+.fp__x:hover { color: var(--text-error-accent); }
+.fp__x svg { width: 12px; height: 12px; }
+.btn.-addf { font-weight: 400; color: var(--text-mid-emphasis); }
+.btn.-addf:hover, .btn.-addf[aria-expanded="true"] { color: var(--text-high-emphasis); }
+.bar .cnt { color: var(--text-mid-emphasis); white-space: nowrap; }
+.addf { width: 248px; max-width: calc(100vw - 32px); }
+.addf__list { max-height: min(50vh, 340px); overflow: auto; overscroll-behavior: contain; margin-top: 4px; }
+.pop__row.-more { color: var(--terminal-v2-muted); }
+.fv { display: grid; gap: 8px; padding: 4px; }
+.fv__row { display: flex; align-items: center; gap: 8px; }
+.fv__in { display: flex; align-items: center; gap: 4px; flex: 1; height: 28px; padding: 0 8px; border-radius: 6px; background: var(--dropdown-hover); color: var(--terminal-v2-muted); }
+.fv__in:focus-within { outline: 1px solid var(--control-focus-border); outline-offset: -1px; }
+.fv__in input { flex: 1; min-width: 0; width: 104px; height: 26px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--terminal-v2-text); }
+.fv .lbl { color: var(--terminal-v2-muted); white-space: nowrap; }
+.fv .qopts { padding: 0; }
+
+/* Tabs: ready tables. A tab is its columns, their order and its conditions; the number is how many assets match the conditions now. */
+.tabs { display: flex; gap: 4px; flex: none; min-width: 0; padding: 6px 8px 0; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs .tab { height: 28px; }
+.tab .n { font-variant-numeric: tabular-nums; }
+.tab .n:empty { display: none; }
+</style>
+
+__ICONS__
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-near" viewBox="0 0 16 16"><path d="M2.5 8h11M5.5 3.5 8 6l2.5-2.5M5.5 12.5 8 10l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="x-okx" viewBox="0 0 12 12"><path fill="currentColor" d="M1 1h3.3v3.3H1zM7.7 1H11v3.3H7.7zM4.35 4.35h3.3v3.3h-3.3zM1 7.7h3.3V11H1zM7.7 7.7H11V11H7.7z"/></symbol>
+  <symbol id="x-bn" viewBox="0 0 12 12"><path fill="currentColor" d="M6 .5 7.7 2.2 6 3.9 4.3 2.2zM2.2 4.3 3.9 6 2.2 7.7.5 6zM9.8 4.3 11.5 6 9.8 7.7 8.1 6zM6 4.3 7.7 6 6 7.7 4.3 6zM6 8.1 7.7 9.8 6 11.5 4.3 9.8z"/></symbol>
+  <symbol id="x-bb" viewBox="0 0 12 12"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M1.6 1.5h3.3a2.1 2.1 0 0 1 0 4.2H1.6zM1.6 5.7h3.9a2.4 2.4 0 0 1 0 4.8H1.6z"/><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M10.4 1.8v8.4"/></symbol>
+</svg>
+
+<div class="app">
+  <section class="widget-frame" aria-label="Screener">
+    <div id="top"></div>
+    <div class="scr__body">
+      <div class="trading-table -reorder" id="wrap" tabindex="0" role="region" aria-label="Screener table">
+        <table><colgroup id="cols"></colgroup><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="pop" id="pop" hidden></div>
+<div class="tip" id="tip" hidden></div>
+
+<script id="snap" type="application/json">__SNAPSHOT__</script>
+<script>
+'use strict';
+/* ========================= Helpers ========================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ok = v => v != null && isFinite(v);
+const clone = o => JSON.parse(JSON.stringify(o));
+const NA = '<span class="na">—</span>';
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('scrv2.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('scrv2.' + k, JSON.stringify(v)); } catch {} },
+};
+
+const EX = [['okx', 'OKX'], ['bn', 'Binance'], ['bb', 'Bybit']];
+const EXN = Object.fromEntries(EX);
+const xg = e => `<svg class="xg" aria-hidden="true"><use href="#x-${e}"/></svg>`;
+const LEVELS = [['do', 'DO'], ['wo', 'WO'], ['mo', 'MO'], ['ma50', 'MA50'], ['ma100', 'MA100'], ['ma200', 'MA200']];
+const LLABEL = Object.fromEntries(LEVELS);
+const LTITLE = { do: "Today's open (UTC): its price and the distance to it", wo: 'Open of the week (Monday UTC): its price and the distance to it', mo: 'Open of the month (UTC): its price and the distance to it', ma50: 'MA 50 of daily closes: its price and the distance to it', ma100: 'MA 100 of daily closes: its price and the distance to it', ma200: 'MA 200 of daily closes: its price and the distance to it' };
+const CROSS_H = 4;   // "crossed" means the hourly closes flipped sides within the last 4 hours
+const LMODES = [['above', 'Above'], ['near', 'Near'], ['below', 'Below'], ['up', `Crossed ↑ ${CROSS_H}h`], ['down', `Crossed ↓ ${CROSS_H}h`]];
+const mLabel = m => LMODES.find(x => x[0] === m)[1];
+const CLASSES = [['all', 'All'], ['crypto', 'Crypto'], ['stock', 'Stocks'], ['commodity', 'Commodities'], ['fx', 'FX']];
+const CLABEL = { crypto: 'Crypto', stock: 'Stock', commodity: 'Commodity', fx: 'FX' };
+const NEARS = [['0.25', '0.25%'], ['0.5', '0.5%'], ['1', '1%'], ['atr', '½ ATR']];
+const DEFAULT_COLS = ['symbol', 'mark', 'chg24', 'vol24', 'oi', 'funding'];
+// A tab is a ready table: the columns in order, the conditions and the sort. Exchanges, asset class and search stay as chosen across tabs.
+// A ready table is the base one plus the columns of its question; its conditions are ordinary phrases on the bar.
+const LIQUID = 10e6;   // the same floor of 24h volume in every ready table
+const TABS = [
+  { id: 'overview', name: 'Overview', title: 'The whole market, busiest first', view: {} },
+  { id: 'anomalies', name: 'Anomalies', title: 'Trading at least twice its 7-day norm today', view: {
+    cols: ['symbol', 'mark', 'chg4h', 'chg24', 'volx7', 'vol24', 'oi', 'funding'],
+    nums: { volx7: { op: '>=', v: 2, v2: null }, vol24: { op: '>=', v: LIQUID, v2: null } }, filters: ['volx7', 'vol24'], sort: { key: 'volx7', dir: 'desc' } } },
+  { id: 'strong', name: 'Strong vs BTC', title: 'Ahead of BTC by 3 to 10% over 24 hours: stronger than the market, not a pump', view: {
+    cols: ['symbol', 'mark', 'chg24', 'vs24h', 'vs4h', 'chg7d', 'vol24', 'oi', 'funding'],
+    nums: { vs24h: { op: 'between', v: 0.03, v2: 0.1 }, vol24: { op: '>=', v: LIQUID, v2: null } }, filters: ['vs24h', 'vol24'], sort: { key: 'vs24h', dir: 'desc' } } },
+  { id: 'weak', name: 'Weak vs BTC', title: 'Behind BTC by 3 to 10% over 24 hours: weaker than the market, not a collapse', view: {
+    cols: ['symbol', 'mark', 'chg24', 'vs24h', 'vs4h', 'chg7d', 'vol24', 'oi', 'funding'],
+    nums: { vs24h: { op: 'between', v: -0.1, v2: -0.03 }, vol24: { op: '>=', v: LIQUID, v2: null } }, filters: ['vs24h', 'vol24'], sort: { key: 'vs24h', dir: 'asc' } } },
+];
+const TAB = Object.fromEntries(TABS.map(t => [t.id, t]));
+const VIEW_KEYS = ['cols', 'sort', 'nums', 'levels', 'near', 'sector', 'filters', 'sectorPill'];
+const FILTER_KEYS = ['filters', 'nums', 'levels', 'near', 'sector'];
+const baseView = id => Object.assign({ cols: DEFAULT_COLS.slice(), sort: { key: null, dir: null }, nums: {}, levels: {}, near: '0.5', sector: '', filters: [], sectorPill: false }, clone(TAB[id].view));
+
+/*@FMT@*/
+
+/* ========================= State ========================= */
+const F = {
+  ex: Object.assign({ okx: true, bn: true, bb: true }, store.get('ex', {})),
+  cls: 'crypto', search: '',
+  tab: 'overview',
+  // from here to the sort: the view of the current tab (VIEW_KEYS)
+  cols: DEFAULT_COLS.slice(), sector: '',
+  levels: {},            // level column -> above | near | below | up | down
+  near: '0.5',           // range of "near": percent of price, or half of the hourly ATR
+  nums: {},              // number conditions by column key: { op: '>=' | '<=' | 'between', v, v2 }; without a value the phrase is still being written
+  filters: [],           // the phrases on the bar, in the order they were added
+  sectorPill: false,     // the Sector phrase is on the bar (its value may still be empty)
+  sort: { key: null, dir: null },   // dir: desc | asc | near
+  selected: 'c:BTC',
+};
+if (!EX.some(([e]) => F.ex[e])) F.ex = { okx: true, bn: true, bb: true };
+const DATA = JSON.parse($('snap').textContent);
+const S = { rows: [], ts: DATA.ts };
+const POP = { name: null, k: null };
+const CAT = { q: '' };
+const ASSET = new Map(DATA.assets.map(a => [a.k, a]));
+let ROWS = new Map();
+const exCount = e => { let n = 0; for (const a of DATA.assets) if (a.v[e]) n++; return n; };
+
+/* ========================= Data: one row per asset over the selected exchanges ========================= */
+// Volume and open interest add up. Price and the 24h change come from the busiest of the selected exchanges.
+// Funding is brought to 8 hours on every exchange (intervals differ: 1h, 4h, 8h) and weighted by open interest.
+const exOn = () => EX.map(x => x[0]).filter(e => F.ex[e]);
+function aggregate() {
+  const on = exOn(), rows = [];
+  for (const a of DATA.assets) {
+    const vs = on.filter(e => a.v[e]); if (!vs.length) continue;
+    let prim = vs[0]; for (const e of vs) if ((a.v[e].vol || 0) > (a.v[prim].vol || 0)) prim = e;
+    const P = a.v[prim], m = a.m || {}, f8 = {}, px = [];
+    let vol = 0, oi = 0, hasOi = false, fw = 0, fs = 0, fn = 0, fsum = 0;
+    for (const e of vs) {
+      const x = a.v[e]; vol += x.vol || 0;
+      if (ok(x.oi)) { oi += x.oi; hasOi = true; }
+      if (ok(x.f)) { const r8 = x.f * 8 / (x.fi || 8); f8[e] = r8; const w = ok(x.oi) && x.oi > 0 ? x.oi : 0; fw += w; fs += r8 * w; fn++; fsum += r8; }
+      if (ok(x.p) && x.p > 0) px.push(x.p);
+    }
+    const funding = fn ? (fw > 0 ? fs / fw : fsum / fn) : null, fv = Object.values(f8);
+    const lv = {}; for (const [k] of LEVELS) { const p = m.lv ? m.lv[k] : null; lv[k] = ok(p) && p > 0 && ok(P.p) ? { px: p, dist: P.p / p - 1 } : null; }
+    rows.push({ id: a.k, base: a.s, name: a.n || '', nameU: (a.n || '').toUpperCase(), cls: a.cls, sector: a.sec || '', venues: vs, prim, pv: a.v, f8,
+      mark: P.p, last: P.p, chg: { '1h': m.chg ? m.chg['1h'] : null, '4h': m.chg ? m.chg['4h'] : null, '24h': P.c }, chg7d: m.chg7d, chg30d: m.chg30d,
+      vol24: vol, volx7: m.volx7, volx: m.volx || {}, oi: hasOi ? oi : null, oiD: m.oiD || {},
+      funding, fundingAnn: ok(funding) ? funding * 3 * 365 : null, fGap: fv.length > 1 ? Math.max(...fv) - Math.min(...fv) : null,
+      pxGap: px.length > 1 ? (Math.max(...px) / Math.min(...px) - 1) * 1e4 : null,
+      mcap: a.mcap, mcapRank: a.rank, oiMcap: hasOi && a.mcap > 0 ? oi / a.mcap : null, atr: m.atr, regime: m.regime,
+      takerBuy: m.takerBuy || {}, delta: m.delta || {}, tape: m.tape, vsBtc: { '1h': m.vsBtc ? m.vsBtc['1h'] : null, '4h': m.vsBtc ? m.vsBtc['4h'] : null, '24h': null },
+      beta: m.beta, corr: m.corr, spread: m.spread, depth05: m.depth05, lv, spark: m.spark && m.spark.length > 1 ? m.spark : null, x: {} });
+  }
+  const btc = rows.find(r => r.id === 'c:BTC') || DATA.assets.find(a => a.k === 'c:BTC');
+  const b24 = btc ? (btc.chg ? btc.chg['24h'] : Object.values(btc.v)[0].c) : null;
+  for (const r of rows) r.vsBtc['24h'] = ok(b24) && ok(r.chg['24h']) ? r.chg['24h'] - b24 : null;
+  S.rows = rows; ROWS = new Map(rows.map(r => [r.id, r]));
+}
+function classCounts() { const c = { all: S.rows.length }; for (const r of S.rows) c[r.cls] = (c[r.cls] || 0) + 1; return c; }
+function toggleEx(e) {
+  if (F.ex[e] && exOn().length === 1) return;          // one exchange always stays on
+  F.ex[e] = !F.ex[e]; store.set('ex', F.ex); aggregate();
+  if (F.cls !== 'all' && !classCounts()[F.cls]) F.cls = 'all';
+  if (F.sector && !sectorCounts().some(s => s[0] === F.sector)) dropFilter('sector');
+}
+
+/* ========================= Levels and filters ========================= */
+/*@LEVELS@*/
+function passes(r, skipLevel) {
+  if (F.cls !== 'all' && r.cls !== F.cls) return false;
+  if (F.sector && r.sector !== F.sector) return false;
+  if (F.search) { const terms = F.search.toUpperCase().split(',').map(t => t.trim()).filter(Boolean); if (terms.length && !terms.some(t => r.base.includes(t) || r.nameU.includes(t))) return false; }
+  for (const k in F.nums) {
+    const f = F.nums[k], a = ok(f.v), b = f.op === 'between' && ok(f.v2); if (!a && !b) continue;   // a phrase without a value does not filter yet
+    const v = COL[k].val(r); if (!ok(v)) return false;
+    if (f.op === 'between') { const lo = a && b ? Math.min(f.v, f.v2) : a ? f.v : null, hi = a && b ? Math.max(f.v, f.v2) : b ? f.v2 : null; if ((lo != null && v < lo) || (hi != null && v > hi)) return false; }
+    else if (f.op === '>=' ? v < f.v : v > f.v) return false;
+  }
+  for (const k in F.levels) { if (k !== skipLevel && !levelPass(r, k, F.levels[k])) return false; }
+  return true;
+}
+// How many assets would match this level condition with every other filter kept.
+function countLevel(k, m) { let n = 0; for (const r of S.rows) if (passes(r, k) && levelPass(r, k, m)) n++; return n; }
+function sectorCounts() { const m = new Map(); for (const r of S.rows) if (r.sector && (F.cls === 'all' || r.cls === F.cls)) m.set(r.sector, (m.get(r.sector) || 0) + 1); return [...m].sort((a, b) => b[1] - a[1]); }
+
+// A condition reads as a phrase: column, operator, value. The words are the same for numbers and for levels.
+const OPS = [['>=', 'above'], ['<=', 'below'], ['between', 'between']];
+const opLabel = op => OPS.find(x => x[0] === op)[1];
+const UNIT = { usd: ['$', ''], pct: ['', '%'], x: ['', '×'], bps: ['', 'bps'] };
+function thr(k, v) { const u = COL[k].unit; return u === 'usd' ? usdText(v).replace(/\.0+(?=[KMBT])/, '') : u === 'pct' ? String(+(v * 100).toFixed(4)).replace('-', '−') + '%' : u === 'x' ? v + '×' : u === 'bps' ? v + ' bps' : String(v); }
+const qLabel = (k, op, v) => { const q = (COL[k].q || []).find(x => x[0] === op && x[1] === v); return q && q[2] ? q[2] : `${opLabel(op)} ${thr(k, v)}`; };
+// What the value field shows for a stored number, and what a typed text means: 20m, 1.5b, 500k, 3, -0.01.
+function valueInput(k, v) { if (!ok(v)) return ''; const u = COL[k].unit; return u === 'usd' ? usdText(v).slice(1).replace(/\.0+(?=[KMBT])/, '') : u === 'pct' ? String(+(v * 100).toFixed(4)) : String(v); }
+function parseValue(k, text) {
+  const t = String(text).trim().toLowerCase().replace(/[$,%×\s]|bps/g, '').replace('−', '-'), m = t.match(/^(-?\d*\.?\d+)([kmbt])?$/); if (!m) return null;
+  const n = parseFloat(m[1]) * (m[2] ? { k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[m[2]] : 1); if (!isFinite(n)) return null;
+  return COL[k].unit === 'pct' ? n / 100 : n;
+}
+const numOn = f => !!f && (ok(f.v) || (f.op === 'between' && ok(f.v2)));
+function numText(k) { const f = F.nums[k]; if (!numOn(f)) return ''; return f.op !== 'between' ? thr(k, f.v) : (ok(f.v) ? thr(k, f.v) : '…') + ' and ' + (ok(f.v2) ? thr(k, f.v2) : '…'); }
+// Any column of the table can carry a condition: numbers, levels, the sector.
+const filterable = k => k !== 'symbol' && !!COL[k] && !!(COL[k].level || k === 'sector' || (COL[k].val && !COL[k].text));
+const isFiltered = k => !!(F.levels[k] || numOn(F.nums[k]) || (k === 'sector' && F.sector));
+const filterText = k => isFiltered(k) ? 'on' : '';
+function activeCount() { return F.cols.filter(isFiltered).length; }
+// A new phrase: a number waits for its value, a level starts as "near", the sector waits for a choice. Returns the popover to open next.
+function addFilter(k) {
+  if (!F.filters.includes(k)) F.filters.push(k);
+  if (COL[k].level) { F.levels[k] = 'near'; return 'lop'; }
+  if (k === 'sector') { F.sectorPill = true; return 'sval'; }
+  F.nums[k] = { op: '>=', v: null, v2: null }; return 'fval';
+}
+function dropFilter(k) { F.filters = F.filters.filter(x => x !== k); delete F.nums[k]; delete F.levels[k]; if (k === 'sector') { F.sector = ''; F.sectorPill = false; } }
+// Reset returns the conditions the tab came with; a column they need comes back with them.
+function resetFilters() { const b = cleanView(null, F.tab); for (const k of FILTER_KEYS) F[k] = clone(b[k]); F.sectorPill = b.sectorPill; for (const k of b.filters) if (!F.cols.includes(k)) F.cols.push(k); }
+const drafting = () => F.filters.some(k => (F.nums[k] && !numOn(F.nums[k])) || (k === 'sector' && !F.sector));
+const filterSig = v => JSON.stringify(FILTER_KEYS.map(k => v[k]));
+const filtersChanged = () => drafting() || filterSig(cleanView(currentView(), F.tab)) !== filterSig(cleanView(null, F.tab));
+// A phrase left without a value goes away when its popover closes.
+function pruneDrafts(keep) { let cut = false; for (const k of F.filters.slice()) { if (k === keep) continue; if ((F.nums[k] && !numOn(F.nums[k])) || (k === 'sector' && !F.sector)) { dropFilter(k); cut = true; } } return cut; }
+
+/* ========================= Columns ========================= */
+/*@COLS@*/
+// What three exchanges change: the summed figures explain themselves on hover, and each exchange can be its own column.
+// Price as a running figure, from the terminal control bar (AnimatedNumber.vue, tone="none"): on a live tick the digits
+// tween to the new value in 200 ms and take the side's colour, then fade back. A redraw the user caused never flashes.
+const NUMBER_TWEEN_MS = 200;
+const PX_ANIM = new Map();   // asset id -> { shown, to, from, startedAt, flash }
+let pxFrame = null, PAINT_LIVE = false;
+const canAnimate = () => !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) && !document.hidden;
+function priceCell(r) {
+  if (!ok(r.mark)) { PX_ANIM.delete(r.id); return NA; }
+  let a = PX_ANIM.get(r.id);
+  if (!a) { a = { shown: r.mark, to: r.mark, from: r.mark, startedAt: null, flash: '' }; PX_ANIM.set(r.id, a); }
+  else if (r.mark !== a.to) {
+    if (PAINT_LIVE && canAnimate()) { a.from = a.shown; a.to = r.mark; a.flash = r.mark > a.from ? 'up' : 'down'; a.startedAt = performance.now(); runPriceTween(); }
+    else { a.shown = a.to = a.from = r.mark; a.startedAt = null; a.flash = ''; }
+  } else a.flash = '';
+  return `<span class="mark-cell${a.flash ? ' -flash-' + a.flash : ''}">$${fmtPrice(a.shown)}</span>`;
+}
+function runPriceTween() {
+  if (pxFrame !== null) return;
+  const tb = $('tbody');
+  const step = now => {
+    let active = false;
+    for (const [id, a] of PX_ANIM) {
+      if (a.startedAt == null) continue;
+      const p = Math.min(1, (now - a.startedAt) / NUMBER_TWEEN_MS);
+      a.shown = p >= 1 ? a.to : a.from + (a.to - a.from) * (1 - (1 - p) ** 3);
+      if (p >= 1) a.startedAt = null; else active = true;
+      const el = tb.querySelector(`tr[data-id="${id}"] .mark-cell`);
+      if (el) el.textContent = '$' + fmtPrice(a.shown);
+    }
+    pxFrame = active ? requestAnimationFrame(step) : null;
+  };
+  pxFrame = requestAnimationFrame(step);
+}
+const fundText = v => (v > 0 ? '+' : '') + (v * 100).toFixed(4) + '%';
+const fmtFund = v => ok(v) ? `<span class="${v > 0 ? 'pos' : v < 0 ? 'neg' : 'mid'}">${fundText(v)}</span>` : NA;
+const scoped = (r, e) => F.ex[e] && r.pv[e] ? r.pv[e] : null;
+COL.symbol.val = r => r.base;
+COL.mark = { label: 'Price', end: true, w: 118, title: 'Last price on the busiest of the selected exchanges, in USD', val: r => r.mark, fmt: r => priceCell(r) };
+COL.chg24.title = 'Price change over 24 hours on the busiest of the selected exchanges';
+COL.vol24.title = 'Traded over 24 hours on the selected exchanges together, in USD';
+COL.oi.title = 'Open interest on the selected exchanges together, in USD';
+Object.assign(COL.funding, { title: 'Funding rate per 8 hours, weighted by open interest across the selected exchanges', fmt: r => fmtFund(r.funding) });
+delete COL.spark;
+// The hover card of a summed cell: the same figure on each exchange that went into it.
+const TIPF = {
+  mark: x => ok(x.p) ? '$' + fmtPrice(x.p) : '—',
+  chg24: x => ok(x.c) ? (x.c > 0 ? '+' : '') + (x.c * 100).toFixed(2) + '%' : '—',
+  vol24: x => ok(x.vol) ? usdText(x.vol) : '—',
+  oi: x => ok(x.oi) ? usdText(x.oi) : '—',
+  funding: x => ok(x.f) ? fundText(x.f * 8 / (x.fi || 8)) : '—',
+};
+COL.sector.title = 'Crypto sector, or the kind of instrument for stocks, indices, commodities and FX';
+COL.sector.val = r => r.sector || null;
+COL.sector.fmt = r => r.sector ? `<span class="${r.cls === 'crypto' && r.sector !== 'Other' ? '' : 'mid'}" title="${esc(r.name)}">${esc(r.sector)}</span>` : NA;
+COL.venues = { label: 'Listed', end: true, title: 'On how many of the selected exchanges the asset trades', q: [['<=', 1, 'One exchange'], ['>=', 3, 'All three']], val: r => r.venues.length, fmt: r => String(r.venues.length) };
+EX.forEach(([e, n]) => {
+  COL['vol_' + e] = usdCol('Vol ' + n, r => { const x = scoped(r, e); return x ? x.vol : null; }, [['>=', 20e6], ['>=', 100e6]], `Traded over 24 hours on ${n}, in USD`);
+  COL['oi_' + e] = usdCol('OI ' + n, r => { const x = scoped(r, e); return x ? x.oi : null; }, [['>=', 10e6], ['>=', 50e6]], `Open interest on ${n}, in USD`);
+  COL['f_' + e] = { label: 'Funding ' + n, end: true, unit: 'pct', title: `Funding rate on ${n}, brought to 8 hours`, q: [['>=', 0.0003], ['<=', -0.0003]], val: r => ok(r.f8[e]) ? r.f8[e] : null, fmt: r => fmtFund(r.f8[e]) };
+});
+COL.fGap = { label: 'Funding gap', end: true, unit: 'pct', title: 'Widest difference in the 8-hour funding rate between the selected exchanges', q: [['>=', 0.0001], ['>=', 0.0005]], val: r => r.fGap, fmt: r => ok(r.fGap) ? (r.fGap * 100).toFixed(4) + '%' : NA };
+COL.pxGap = { label: 'Price gap', end: true, unit: 'bps', title: 'Widest price difference between the selected exchanges, in basis points', q: [['>=', 10], ['>=', 30]], val: r => r.pxGap, fmt: r => ok(r.pxGap) ? r.pxGap.toFixed(1) + ' bps' : NA };
+
+/* ========================= Tabs ========================= */
+// Every tab keeps its own view: what is changed in a tab stays in that tab until it is reset. Only changed tabs are stored,
+// so a ready table follows its definition until the user makes it their own.
+const currentView = () => Object.fromEntries(VIEW_KEYS.map(k => [k, F[k]]));
+function cleanView(v, id) {
+  const o = Object.assign(baseView(id), v ? clone(v) : {});
+  o.cols = ['symbol', ...[...new Set(Array.isArray(o.cols) ? o.cols : [])].filter(k => COL[k] && k !== 'symbol')];
+  const has = k => o.cols.includes(k), byKey = (a, b) => a[0] < b[0] ? -1 : 1;
+  o.nums = Object.fromEntries(Object.entries(o.nums || {}).filter(([k, f]) => has(k) && f && numOn(f)).sort(byKey).map(([k, f]) => [k, { op: f.op, v: ok(f.v) ? f.v : null, v2: f.op === 'between' && ok(f.v2) ? f.v2 : null }]));
+  o.levels = Object.fromEntries(Object.entries(o.levels || {}).filter(([k, m]) => has(k) && COL[k].level && LMODES.some(x => x[0] === m)).sort(byKey));
+  if (!has('sector') || !o.sector) o.sector = '';
+  o.sectorPill = !!o.sector;
+  const on = k => !!(o.nums[k] || o.levels[k] || (k === 'sector' && o.sector));
+  o.filters = [...new Set(Array.isArray(o.filters) ? o.filters : [])].filter(on);
+  for (const k of [...Object.keys(o.nums), ...Object.keys(o.levels), 'sector']) if (on(k) && !o.filters.includes(k)) o.filters.push(k);
+  if (!NEARS.some(x => x[0] === o.near) || !Object.values(o.levels).includes('near')) o.near = '0.5';
+  if (!o.sort || !has(o.sort.key) || !COL[o.sort.key].val || !['asc', 'desc', 'near'].includes(o.sort.dir)) o.sort = { key: null, dir: null };
+  return o;
+}
+const VIEWS = {};
+{ const saved = store.get('views', null) || { overview: { cols: store.get('cols', DEFAULT_COLS) } }; for (const t of TABS) VIEWS[t.id] = cleanView(saved[t.id], t.id); }
+const viewChanged = id => JSON.stringify(VIEWS[id]) !== JSON.stringify(cleanView(null, id));
+function loadView(id) { const near = F.near; F.tab = id; Object.assign(F, clone(VIEWS[id])); if (!Object.values(F.levels).includes('near')) F.near = near; }
+function saveView() { VIEWS[F.tab] = cleanView(currentView(), F.tab); const out = {}; for (const t of TABS) if (viewChanged(t.id)) out[t.id] = VIEWS[t.id]; store.set('views', out); }
+const hashTab = () => { const h = location.hash.slice(1); return TAB[h] ? h : null; };
+function switchTab(id) {
+  if (!TAB[id] || id === F.tab) return;
+  saveView(); loadView(id); store.set('tab', id);
+  try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  const w = $('wrap'); w.scrollTop = 0; w.scrollLeft = 0;
+  render();
+}
+// How many assets match the conditions of a tab right now, within the chosen exchanges, class and search. No conditions, no number.
+function tabCount(id) {
+  const cur = id === F.tab, v = cur ? F : VIEWS[id]; if (!(cur ? F.cols.some(isFiltered) : v.filters.length)) return null;
+  const keep = cur ? null : currentView(); if (!cur) Object.assign(F, v);
+  let n = 0; try { for (const r of S.rows) if (passes(r)) n++; } finally { if (!cur) Object.assign(F, keep); }
+  return n;
+}
+const tabsHtml = () => `<div class="tabs" role="group" aria-label="Tables">${TABS.map(t => { const n = tabCount(t.id); return `<button class="tab" data-a="tab" data-v="${t.id}" aria-pressed="${F.tab === t.id}" title="${esc(t.title)}">${t.name}<span class="n" data-n="${t.id}">${n == null ? '' : n}</span></button>`; }).join('')}</div>`;
+function paintTabCounts() { for (const el of document.querySelectorAll('#top [data-n]')) { const n = tabCount(el.dataset.n), t = n == null ? '' : String(n); if (el.textContent !== t) el.textContent = t; } }
+{ const t = store.get('tab', ''); loadView(hashTab() || (TAB[t] ? t : 'overview')); }
+
+/*@CATALOG@*/
+CATALOG[0].items = CATALOG[0].items.filter(it => it.keys[0][0] !== 'spark');
+CATALOG.splice(4, 0, { g: 'By exchange', items: [
+  { name: 'Listings', desc: 'On how many of the selected exchanges it trades', keys: [['venues', '']] },
+  { name: 'Volume by exchange', desc: 'Where the asset actually trades', keys: EX.map(([e, n]) => ['vol_' + e, n]) },
+  { name: 'Open interest by exchange', desc: 'Where the positions sit', keys: EX.map(([e, n]) => ['oi_' + e, n]) },
+  { name: 'Funding by exchange', desc: 'Rate per 8 hours on each one and the gap between them', keys: [...EX.map(([e, n]) => ['f_' + e, n]), ['fGap', 'Gap']] },
+  { name: 'Price gap', desc: 'Widest price difference between exchanges, in basis points', keys: [['pxGap', '']] },
+] });
+
+function saveCols() { saveView(); }
+function addCol(k) { if (!COL[k] || F.cols.includes(k)) return; F.cols.push(k); saveCols(); requestAnimationFrame(() => { $('wrap').scrollLeft = $('wrap').scrollWidth; }); }
+// A hidden column takes its filter and its order with it: nothing may filter the table from out of sight.
+function hideCol(k) { if (k === 'symbol') return; F.cols = F.cols.filter(x => x !== k); dropFilter(k); if (F.sort.key === k) F.sort = { key: null, dir: null }; saveCols(); }
+function moveCol(k, target, edge) { if (k === 'symbol' || target === 'symbol' || k === target) return; const list = F.cols.filter(x => x !== k); const i = list.indexOf(target); if (i < 0) return; list.splice(edge === 'before' ? i : i + 1, 0, k); F.cols = list; saveCols(); }
+
+/* ========================= Order ========================= */
+// Without a chosen column the order follows the question asked: nearest to the level, latest cross, else volume.
+function implicitOrder() {
+  const ks = Object.keys(F.levels);
+  const nearK = ks.find(k => F.levels[k] === 'near'); if (nearK) return { kind: 'near', k: nearK };
+  const crossK = ks.find(k => F.levels[k] === 'up' || F.levels[k] === 'down'); if (crossK) return { kind: 'cross', k: crossK };
+  return { kind: 'vol' };
+}
+function sorted(list) {
+  const s = F.sort, bad = v => v == null || (typeof v === 'number' && !isFinite(v));
+  if (s.key && COL[s.key] && COL[s.key].val) {
+    const c = COL[s.key], get = s.dir === 'near' ? r => { const v = c.val(r); return bad(v) ? null : Math.abs(v); } : c.val;
+    return list.sort((a, b) => { const x = get(a), y = get(b); if (bad(x) && bad(y)) return 0; if (bad(x)) return 1; if (bad(y)) return -1; const d = typeof x === 'string' ? x.localeCompare(y) : x - y; return s.dir === 'desc' ? -d : d; });
+  }
+  const o = implicitOrder();
+  if (o.kind === 'near') list.sort((a, b) => Math.abs(a.lv[o.k].dist) - Math.abs(b.lv[o.k].dist));
+  else if (o.kind === 'cross') list.sort((a, b) => (cross(a, o.k) || { ago: 99 }).ago - (cross(b, o.k) || { ago: 99 }).ago || (b.vol24 || 0) - (a.vol24 || 0));
+  else list.sort((a, b) => (b.vol24 || 0) - (a.vol24 || 0));
+  return list;
+}
+
+/* ========================= Parts: the same blocks in every variant ========================= */
+const CHECK = '<svg><use href="#i-check"/></svg>';
+const tick = on => on ? '<svg class="tick"><use href="#i-check"/></svg>' : '';
+const tks = on => `<span class="tks">${on ? CHECK : ''}</span>`;
+const seg = (items, cur, act, label) => `<div class="seg" role="group" aria-label="${label}">${items.map(([v, l]) => `<button data-a="${act}" data-v="${v}" aria-pressed="${cur === v}">${l}</button>`).join('')}</div>`;
+const nearSeg = () => seg(NEARS, F.near, 'near', 'Range of near');
+// Exchanges: a checklist; one always stays on.
+const exValue = () => { const on = EX.filter(([e]) => F.ex[e]); return on.length === EX.length ? 'All' : on.map(x => x[1]).join(', '); };
+const exRows = () => EX.map(([e, n]) => `<button class="pop__row" data-a="ex" data-v="${e}" role="menuitemcheckbox" aria-checked="${!!F.ex[e]}"><span class="box">${F.ex[e] ? CHECK : ''}</span>${xg(e)}${n}<span class="hint">${exCount(e)}</span></button>`).join('');
+// Asset class: a list with counts. A class the selected exchanges do not list is switched off.
+const clsValue = () => CLASSES.find(x => x[0] === F.cls)[1];
+const clsRows = () => { const c = classCounts(); return CLASSES.map(([v, l]) => `<button class="pop__row" data-a="cls" data-v="${v}" role="menuitemradio" aria-checked="${F.cls === v}"${c[v] ? '' : ' disabled'}>${v === 'all' ? 'All assets' : l}<span class="hint">${c[v] || 0}</span>${tks(F.cls === v)}</button>`).join(''); };
+// The phrases on the bar. Each part that can change is a button: the operator and the value.
+function pillsHtml() {
+  const part = (act, k, html, cls = '') => `<button class="fp__s${cls}" data-a="${act}" data-k="${k}" aria-haspopup="true" aria-expanded="${POP.name === act && POP.k === k}">${html}</button>`;
+  return F.filters.filter(k => F.cols.includes(k)).map(k => {
+    const name = esc(colLabel(COL[k])); let mid;
+    if (F.levels[k]) { const m = F.levels[k]; mid = part('lop', k, mLabel(m).toLowerCase(), ' -v') + (m === 'near' ? part('lval', k, NEARS.find(x => x[0] === F.near)[1], ' -v') : ''); }
+    else if (k === 'sector') mid = '<span class="fp__w">is</span>' + part('sval', k, F.sector ? esc(F.sector) : 'Select value', F.sector ? ' -v' : ' -empty');
+    else { const t = numText(k); mid = part('fop', k, opLabel(F.nums[k].op)) + part('fval', k, t || 'Select value', t ? ' -v' : ' -empty'); }
+    return `<span class="fp"><span class="fp__n">${name}</span>${mid}<button class="fp__x" data-a="chipx" data-k="${k}" title="Remove the condition" aria-label="Remove the condition on ${name}"><svg><use href="#i-close"/></svg></button></span>`;
+  }).join('');
+}
+// Add filter offers the columns of the table that have no condition yet.
+let ADDQ = '';
+function addList() {
+  const q = ADDQ.trim().toLowerCase(), free = F.cols.filter(k => filterable(k) && !F.filters.includes(k));
+  if (!free.length) return '<div class="empty">Every column already has a condition</div>';
+  return free.filter(k => !q || colLabel(COL[k]).toLowerCase().includes(q)).map(k => `<button class="pop__row" data-a="addf" data-k="${k}">${esc(colLabel(COL[k]))}</button>`).join('') || '<div class="empty">Nothing found</div>';
+}
+const popAdd = () => `<div class="addf"><label class="search cat__search"><svg><use href="#i-search"/></svg><input id="addq" type="search" placeholder="Find a column" aria-label="Find a column" autocomplete="off" value="${esc(ADDQ)}"></label><div class="addf__list" id="addlist">${addList()}</div><div class="pop__sep"></div><button class="pop__row -more" data-a="pop" data-v="columns">Another metric: add its column</button></div>`;
+const popOp = k => OPS.map(([op, l]) => `<button class="pop__row" data-a="setop" data-k="${k}" data-v="${op}" role="menuitemradio" aria-checked="${F.nums[k].op === op}">${l}<span class="hint"></span>${tks(F.nums[k].op === op)}</button>`).join('');
+// The value: a field with the unit of the column and, under it, the usual thresholds as one-click answers.
+function popVal(k) {
+  const f = F.nums[k], [pre, post] = UNIT[COL[k].unit] || ['', ''];
+  const field = (id, v, ph) => `<label class="fv__in">${pre ? `<span>${pre}</span>` : ''}<input id="${id}" data-k="${k}" type="text" inputmode="decimal" autocomplete="off" placeholder="${ph}" aria-label="${ph}" value="${esc(valueInput(k, v))}">${post ? `<span>${post}</span>` : ''}</label>`;
+  const quick = f.op === 'between' ? '' : (COL[k].q || []).map(([op, v]) => `<button class="opt" data-a="qset" data-k="${k}" data-op="${op}" data-v="${v}" aria-pressed="${f.op === op && f.v === v}">${esc(qLabel(k, op, v))}</button>`).join('');
+  return `<div class="fv"><div class="fv__row">${field('fvin', f.v, f.op === 'between' ? 'From' : 'Value')}${f.op === 'between' ? `<span class="lbl">and</span>${field('fvin2', f.v2, 'To')}` : ''}</div>${quick ? `<div class="qopts">${quick}</div>` : ''}</div>`;
+}
+const popLop = k => LMODES.map(([m]) => `<button class="pop__row" data-a="lv" data-k="${k}" data-m="${m}" role="menuitemradio" aria-checked="${F.levels[k] === m}">${mLabel(m)}<span class="hint">${countLevel(k, m)}</span>${tks(F.levels[k] === m)}</button>`).join('');
+const popLval = () => `<div class="fv"><div class="fv__row"><span class="lbl">Near is within</span>${nearSeg()}</div></div>`;
+const popSval = () => `<div class="pop__wrap">${sectorCounts().map(([sec, n]) => `<button class="pop__row" data-a="sector" data-v="${esc(sec)}" role="menuitemradio" aria-checked="${F.sector === sec}">${esc(sec)}<span class="hint">${n}</span>${tks(F.sector === sec)}</button>`).join('')}</div>`;
+// The columns of the table as a list: drag to reorder, cross to remove.
+const colList = () => `<div class="dl">${F.cols.map(k => {
+  const name = esc(colLabel(COL[k]));
+  return `<div class="dl__row" data-k="${k}"${k === 'symbol' ? ' data-locked title="Symbol always stays first"' : ' title="Drag to reorder"'}><svg class="dl__grip"><use href="#i-grip"/></svg><span class="dl__n">${name}</span>${k === 'symbol' ? '' : `<button class="dl__x" data-a="hide" data-k="${k}" title="Remove from the table" aria-label="Remove ${name}"><svg><use href="#i-close"/></svg></button>`}</div>`;
+}).join('')}</div>`;
+function catalogList() {
+  const q = CAT.q.trim().toLowerCase();
+  return CATALOG.map(g => {
+    const items = g.items.filter(it => !q || (g.g + ' ' + it.name + ' ' + it.desc).toLowerCase().includes(q)); if (!items.length) return '';
+    return `<div class="pop__group">${g.g}</div>` + items.map(it => `<div class="cat__item"><div class="cat__text"><b>${it.name}</b><span>${it.desc}</span></div><div class="cat__keys">${it.keys.map(([k, l]) => { const on = F.cols.includes(k); return `<button class="ck" data-a="col" data-k="${k}" aria-pressed="${on}" title="${on ? 'Remove from the table' : 'Add to the table'}">${l || (on ? 'Added' : 'Add')}</button>`; }).join('')}</div></div>`).join('');
+  }).join('') || '<div class="empty">Nothing found</div>';
+}
+const catalogHtml = () => `<div class="cat"><label class="search cat__search"><svg><use href="#i-search"/></svg><input id="catq" type="search" placeholder="Find a metric" aria-label="Find a metric" autocomplete="off" value="${esc(CAT.q)}"></label><div class="cat__list" id="catlist">${catalogList()}</div></div>`;
+const popColumns = () => `<div class="cols"><div><div class="pop__group">In the table</div>${colList()}<div class="pop__foot"><button class="btn -ghost" data-a="reset" title="Back to the columns, order and conditions this tab came with">Reset</button></div></div><div><div class="pop__group">Add a column</div>${catalogHtml()}</div></div>`;
+/* ========================= Render ========================= */
+function renderTop() {
+  const search = `<label class="search"><svg><use href="#i-search"/></svg><input id="search" type="search" placeholder="Search" aria-label="Search by ticker or name" autocomplete="off" value="${esc(F.search)}"></label>`;
+  const dd = (name, k, v) => `<button class="btn -dd" data-a="pop" data-v="${name}" aria-haspopup="true" aria-expanded="${POP.name === name}"><span class="k">${k}</span>${v}<svg><use href="#i-down"/></svg></button>`;
+  const val = v => `<span class="v">${v}</span>`;
+  // on the left everything that chooses the rows, read as one line: where, what, then the conditions; on the right the columns
+  $('top').innerHTML = `${tabsHtml()}<div class="bar">${search}${dd('ex', 'Exchanges', val(exValue()))}${dd('cls', 'Assets', val(clsValue()))}${pillsHtml()}<button class="btn -addf" data-a="pop" data-v="addf" aria-haspopup="true" aria-expanded="${POP.name === 'addf'}"><svg><use href="#i-filter"/></svg>Add filter</button><span class="bar__grow"></span>${F.filters.length ? '<span class="cnt" id="cnt"></span>' : ''}${filtersChanged() ? '<button class="btn -ghost" data-a="clear">Reset filters</button>' : ''}${dd('columns', 'Columns', val(F.cols.length))}</div>`;
+}
+function renderHead() {
+  $('thead').innerHTML = '<tr>' + F.cols.map(k => {
+    const c = COL[k], s = F.sort.key === k ? F.sort.dir : null, name = esc(colLabel(c));
+    const icon = c.val ? `<svg class="srt"><use href="#${s === 'asc' ? 'i-up' : s === 'near' ? 'i-near' : 'i-down'}"/></svg>` : '';
+    return `<th data-k="${k}" data-a="sort" class="${c.end ? '-end' : ''}${filterText(k) ? ' -flt' : ''}"${s ? ` aria-sort="${s === 'asc' ? 'ascending' : s === 'near' ? 'other' : 'descending'}"` : ''}${c.pin ? ' data-pin="left"' : ''} title="${esc(c.title || '')}"><span class="lbl">${name}${icon}</span></th>`;
+  }).join('') + '</tr>';
+  layout();
+}
+// Widths: the symbol and text columns keep theirs; every number column gets its minimum plus an equal share of what is left.
+function colMin(k) {
+  const c = COL[k];
+  if (k === 'symbol') { const n = exOn().length; return 16 + 104 + (n > 1 ? 8 + n * 12 + (n - 1) * 4 : 0); }
+  return Math.ceil(Math.max(c.w || (c.level ? 156 : c.end ? 100 : 116), colLabel(c).length * 6.6 + (c.end ? 36 : 34)));
+}
+function layout() {
+  const wrap = $('wrap'), avail = wrap.clientWidth, mins = F.cols.map(colMin), flex = F.cols.map(k => !!COL[k].end);
+  const sum = mins.reduce((a, b) => a + b, 0), n = flex.filter(Boolean).length, add = n ? Math.max(0, avail - sum) / n : 0;
+  $('cols').innerHTML = F.cols.map((k, i) => `<col style="width:${(mins[i] + (flex[i] ? add : 0)).toFixed(2)}px">`).join('');
+  wrap.querySelector('table').style.width = (n ? Math.max(avail, sum) : sum).toFixed(2) + 'px';
+}
+function renderBody() {
+  const total = S.rows.filter(r => F.cls === 'all' || r.cls === F.cls).length;
+  const list = sorted(S.rows.filter(r => passes(r))), limit = 400, on = exOn();
+  // one fixed place per selected exchange right after the ticker: an empty place means the asset does not trade there
+  const marks = r => on.length > 1 ? `<span class="venues">${on.map(e => `<span class="vslot"${r.pv[e] ? ` title="${EXN[e]}"` : ''}>${r.pv[e] ? xg(e) : ''}</span>`).join('')}</span>` : '';
+  $('tbody').innerHTML = list.length ? list.slice(0, limit).map(r => `<tr data-id="${esc(r.id)}" aria-selected="${r.id === F.selected}">` + F.cols.map(k => {
+    const c = COL[k];
+    const html = k === 'symbol' ? `<span class="sym"><b title="${esc(r.name)}">${esc(r.base)}</b>${marks(r)}</span>` : c.fmt(r);
+    return `<td data-k="${k}" class="${c.end ? '-end' : ''}"${c.pin ? ' data-pin="left"' : ''}>${html}</td>`;
+  }).join('') + '</tr>').join('') : `<tr><td colspan="${F.cols.length}" class="empty">Nothing matches</td></tr>`;
+  const cnt = $('cnt'); if (cnt) cnt.textContent = `${list.length} of ${total}`;
+  paintTabCounts(); paintTip();
+}
+// The hover card follows the cell under the pointer and survives the redraw of a live tick.
+const TIP = { id: null, k: null };
+function paintTip() {
+  const el = $('tip'); if (!TIP.id) { el.hidden = true; return; }
+  const r = ROWS.get(TIP.id), td = r && document.querySelector(`#tbody tr[data-id="${TIP.id}"] td[data-k="${TIP.k}"]`);
+  if (!td || r.venues.length < 2) { el.hidden = true; return; }
+  const lead = TIP.k === 'mark' || TIP.k === 'chg24' ? r.prim : null;   // price and change are taken from one exchange, the rest add up
+  el.innerHTML = r.venues.map(e => `<span class="${!lead || lead === e ? '-lead' : ''}">${xg(e)}${EXN[e]}</span><b class="${lead && lead !== e ? '-dim' : ''}">${TIPF[TIP.k](r.pv[e])}</b>`).join('');
+  el.hidden = false; const b = td.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.max(8, Math.min(b.right - w, innerWidth - w - 8)) + 'px';
+  el.style.top = (b.bottom + h + 6 > innerHeight ? b.top - h - 2 : b.bottom + 2) + 'px';
+}
+// Re-rendering a scrolling panel must not throw the reader back to its top or drop the caret of its search field.
+function keepPanel(el, sels, paint) {
+  const st = sels.map(s => el.querySelector(s) ? el.querySelector(s).scrollTop : 0), focused = document.activeElement && document.activeElement.id === 'catq';
+  paint();
+  sels.forEach((s, i) => { if (el.querySelector(s)) el.querySelector(s).scrollTop = st[i]; });
+  if (focused && $('catq')) { const i = $('catq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+const PILL_POPS = new Set(['fop', 'fval', 'lop', 'lval', 'sval']);
+function renderPop() {
+  const el = $('pop'); if (!POP.name) { el.hidden = true; return; }
+  const anchor = PILL_POPS.has(POP.name) ? document.querySelector(`[data-a="${POP.name}"][data-k="${POP.k}"]`) : document.querySelector(`[data-a="pop"][data-v="${POP.name}"]`);
+  if (!anchor) { POP.name = POP.k = null; el.hidden = true; return; }
+  const k = POP.k, html = { ex: exRows, cls: clsRows, columns: popColumns, addf: popAdd, fop: () => popOp(k), fval: () => popVal(k), lop: () => popLop(k), lval: popLval, sval: popSval }[POP.name];
+  keepPanel(el, ['.cat__list', '.cols .dl', '.addf__list'], () => { el.innerHTML = html(); });
+  el.hidden = false; const r = anchor.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px';
+  el.style.top = Math.max(8, Math.min(r.bottom + 4, innerHeight - h - 8)) + 'px';
+}
+function render() { saveView(); renderTop(); renderHead(); renderBody(); renderPop(); }
+function closePop() {
+  if (POP.name) { POP.name = POP.k = null; $('pop').hidden = true; document.querySelectorAll('[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false')); }
+  if (pruneDrafts()) renderTop();
+}
+// Opening the popover of another button or phrase closes the current one; the same button again just closes.
+function openPop(name, k) {
+  if (POP.name === name && (POP.k || null) === (k || null)) { closePop(); return render(); }
+  POP.name = name; POP.k = k || null; pruneDrafts(k); if (name === 'columns') CAT.q = ''; if (name === 'addf') ADDQ = '';
+  render();
+  const f = name === 'columns' ? $('catq') : name === 'addf' ? $('addq') : name === 'fval' ? $('fvin') : null;
+  if (f && (name === 'fval' || matchMedia('(hover: hover)').matches)) { f.focus(); if (f.select) f.select(); }
+}
+
+/* ========================= Drag to reorder (the terminal's pointer pattern: 4px threshold, coloured source, edge line on the target) ========================= */
+/*@DRAG@*/
+makeDrag($('thead'), 'th[data-k]', 'x', () => true);
+makeDrag($('pop'), '.dl__row', 'y', () => true, true);
+
+/* ========================= Events ========================= */
+const OPENERS = new Set(['pop', 'fop', 'fval', 'lop', 'lval', 'sval']);
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-a]');
+  const row = !t && e.target.closest('#tbody tr[data-id]');
+  if (row) { F.selected = row.dataset.id; renderBody(); }
+  if (!t) { if (!e.target.closest('#pop')) closePop(); return; }
+  if (t.disabled) return;
+  const a = t.dataset.a, v = t.dataset.v, k = t.dataset.k, m = t.dataset.m;
+  if (OPENERS.has(a)) return openPop(a === 'pop' ? v : a, a === 'pop' ? null : k);
+  if (!t.closest('#pop')) closePop();
+  switch (a) {
+    case 'tab': return switchTab(v);
+    case 'ex': toggleEx(v); return render();
+    case 'cls': F.cls = v; if (F.sector && !sectorCounts().some(s => s[0] === F.sector)) dropFilter('sector'); closePop(); return render();
+    case 'addf': return openPop(addFilter(k), k);
+    case 'setop': { const f = F.nums[k]; f.op = v; if (v !== 'between') f.v2 = null; if (ok(f.v) && v !== 'between') { closePop(); return render(); } return openPop('fval', k); }
+    case 'qset': F.nums[k] = { op: t.dataset.op, v: +v, v2: null }; closePop(); return render();
+    case 'lv': F.levels[k] = m; closePop(); return render();
+    case 'near': F.near = v; closePop(); return render();
+    case 'sector': F.sector = v; closePop(); return render();
+    case 'chipx': dropFilter(k); closePop(); return render();
+    case 'clear': resetFilters(); closePop(); return render();
+    case 'col': if (F.cols.includes(k)) hideCol(k); else addCol(k); return render();
+    case 'hide': hideCol(k); return render();
+    case 'reset': Object.assign(F, cleanView(null, F.tab)); return render();
+    case 'sort': {   // header click: first direction, the other one, then back to the default order
+      const c = COL[k]; if (!c || !c.val) return; const first = c.text ? 'asc' : 'desc', second = c.text ? 'desc' : 'asc', s = F.sort;
+      F.sort = s.key !== k ? { key: k, dir: first } : s.dir === first ? { key: k, dir: second } : { key: null, dir: null };
+      saveView(); renderHead(); return renderBody();
+    }
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'search') { F.search = t.value; return renderBody(); }
+  if (t.id === 'catq') { CAT.q = t.value; $('catlist').innerHTML = catalogList(); return; }
+  if (t.id === 'addq') { ADDQ = t.value; $('addlist').innerHTML = addList(); return; }
+  if (t.id === 'fvin' || t.id === 'fvin2') {   // the table answers while the value is typed
+    const f = F.nums[t.dataset.k]; if (!f) return;
+    f[t.id === 'fvin' ? 'v' : 'v2'] = parseValue(t.dataset.k, t.value); saveView(); renderTop(); renderHead(); renderBody();
+  }
+});
+document.addEventListener('keydown', e => {
+  const id = e.target && e.target.id;
+  if (e.key === 'Escape' && POP.name) { closePop(); return render(); }
+  if (e.key !== 'Enter') return;
+  if (id === 'fvin' && $('fvin2')) { e.preventDefault(); return $('fvin2').focus(); }
+  if (id === 'fvin' || id === 'fvin2') { e.preventDefault(); closePop(); return render(); }
+  if (id === 'addq') { const first = document.querySelector('#addlist [data-a="addf"]'); if (first) { e.preventDefault(); first.click(); } }
+});
+$('wrap').addEventListener('scroll', e => { e.currentTarget.classList.toggle('-scrolled', e.currentTarget.scrollLeft > 0); if (TIP.id) { TIP.id = null; paintTip(); } });
+$('tbody').addEventListener('mouseover', e => {
+  const td = e.target.closest('td[data-k]'), tr = td && td.parentElement, k = td ? td.dataset.k : null;
+  if (k && TIPF[k] && tr.dataset.id) { if (TIP.id !== tr.dataset.id || TIP.k !== k) { TIP.id = tr.dataset.id; TIP.k = k; paintTip(); } }
+  else if (TIP.id) { TIP.id = null; paintTip(); }
+});
+$('wrap').addEventListener('mouseleave', () => { if (TIP.id) { TIP.id = null; paintTip(); } });
+addEventListener('hashchange', () => { const h = hashTab(); if (h) { closePop(); switchTab(h); } });
+if (typeof ResizeObserver === 'function') new ResizeObserver(() => layout()).observe($('wrap')); else addEventListener('resize', layout);
+
+/* ========================= Live data =========================
+   The page opens on the snapshot built into it. Served by the screener service it goes live: the service
+   folds OKX, Binance and Bybit into one row per asset (GET /assets) and pushes the rows about once a second
+   (GET /stream?view=assets). Which exchanges go into a row is chosen here, so the page adds up the blocks itself. */
+let paintTimer = null;
+function touch() {   // one redraw per batch of updates
+  if (paintTimer) return;
+  paintTimer = setTimeout(() => { paintTimer = null; if (document.body.classList.contains('-dragging')) return; PAINT_LIVE = true; aggregate(); renderBody(); PAINT_LIVE = false; }, 250);
+}
+function applyAssets(d) {
+  if (!d || !Array.isArray(d.assets) || !d.assets.length) throw new Error('no assets');
+  DATA.assets = d.assets; ASSET.clear(); for (const a of d.assets) ASSET.set(a.k, a);
+  S.ts = d.ts || Date.now();
+}
+async function getJson(url, ms = 8000) {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+  try { const res = await fetch(url, { signal: ctl.signal, cache: 'no-store' }); if (!res.ok) throw new Error(url + ' ' + res.status); return await res.json(); } finally { clearTimeout(timer); }
+}
+async function startFeeds() {
+  if (location.protocol !== 'http:') return;   // the local service; a published copy stays on its snapshot
+  try { applyAssets(await getJson('/assets')); touch(); } catch (e) { return; }   // no service behind this page: the snapshot stays
+  let poll = null;
+  const startPoll = () => { if (!poll) poll = setInterval(async () => { if (document.hidden) return; try { applyAssets(await getJson('/assets')); touch(); } catch (e) {} }, 5000); };
+  if (typeof EventSource !== 'function') return startPoll();
+  const es = new EventSource('/stream?view=assets');
+  es.addEventListener('assets', e => { try { applyAssets(JSON.parse(e.data)); touch(); } catch (err) { console.warn(err); } });
+  es.addEventListener('error', startPoll);   // the stream reconnects by itself; polling covers the gap
+  es.addEventListener('open', () => { clearInterval(poll); poll = null; });
+}
+
+/* ========================= Boot ========================= */
+aggregate(); render(); startFeeds();
+</script>

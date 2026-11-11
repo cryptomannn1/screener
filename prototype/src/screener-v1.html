@@ -1,0 +1,912 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scope360 Screener</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+/* Layout: the terminal's maximized widget frame filling the viewport; a slim prototype bar above it. */
+:root {
+  --font: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+  /* terminal-front _theme.scss, light */
+  --white: #ffffff; --black: #141414;
+  --neutral-800: #1c2026; --neutral-700: #6e6e72; --neutral-600: #7f7f83; --neutral-500: #8e8e93;
+  --neutral-400: #ababae; --neutral-300: #c3c3c5; --neutral-200: #d9d9da; --neutral-100: #ededed;
+  --neutral-50: #f6f6f6; --neutral-25: #fafafa;
+  --blue-500: #007aff; --blue-400: #729eff; --blue-300: #a1bbff; --blue-800: #004da1;
+  --green-500: #56b683; --green-700: #438d65; --green-800: #367353; --green-300: #aed6bf;
+  --red-500: #f18169; --red-700: #bb6451; --red-800: #985242; --red-300: #f7beb5;
+  --orange-500: #ff6f00; --orange-400: #ffa432; --yellow-500: #ffcc00;
+
+  --terminal-v2-text: #202326; --terminal-v2-muted: #60676a;
+  --dropdown-background: #ffffff;
+  --dropdown-hover: color-mix(in srgb, var(--terminal-v2-text) 5%, var(--dropdown-background));
+  --dropdown-border: color-mix(in srgb, var(--terminal-v2-text) 10%, transparent);
+  --dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --table-pin-shadow: rgb(0 0 0 / 25%);
+  --primary-accent: var(--blue-500); --primary-deep: var(--blue-800);
+  --control-focus-border: color-mix(in srgb, var(--primary-deep) 45%, var(--terminal-v2-muted));
+  --text-high-emphasis: var(--neutral-800); --text-mid-emphasis: var(--neutral-500); --text-low-emphasis: var(--neutral-400);
+  --text-light: var(--white); --text-success-accent: var(--green-500); --text-error-accent: var(--red-500);
+  --text-warning-accent: var(--orange-500); --text-attention-accent: var(--yellow-500);
+  --icons-mid-emphasis: var(--neutral-500); --icons-low-emphasis: var(--neutral-300);
+  --card-background: var(--white); --dark-background: var(--neutral-800); --app-background: var(--neutral-25);
+  --card-primary-background-light: #e4ebff; --card-neutral-background: var(--neutral-100);
+  --card-success-background-light: #e7f2eb; --card-error-background-light: #fcebe9;
+  --border: var(--neutral-100); --border-secondary: transparent; --background-secondary: transparent;
+  --long: var(--green-500); --short: var(--red-500);
+  --widget-background: var(--white); --widget-header-background: var(--neutral-25);
+  --link-group-orange: var(--orange-500);
+  --depth-bid-fill: rgba(86, 182, 131, 0.16); --depth-ask-fill: rgba(241, 129, 105, 0.16);
+  --cell-border: var(--border);
+  --shadow-elevate: 0 0 0 1px rgba(0,0,0,.06), 0 6px 6px -3px rgba(0,0,0,.06), 0 24px 24px -12px rgba(0,0,0,.04), 0 24px 24px 2px rgba(0,0,0,.1);
+  --space-2: 2px; --space-4: 4px; --space-6: 6px; --space-8: 8px; --space-12: 12px; --space-16: 16px; --space-24: 24px; --space-32: 32px;
+  --radius-4: 4px; --radius-6: 6px; --radius-8: 8px;
+  --duration-fast: 120ms; --duration-base: 200ms; --duration-slow: 320ms; --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --row-h: 38px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --terminal-v2-text: var(--neutral-50); --terminal-v2-muted: var(--neutral-500);
+  --dropdown-background: #1a1a1c; --dropdown-shadow: 0 8px 24px rgba(0,0,0,.32);
+  --primary-deep: var(--blue-300);
+  --text-high-emphasis: var(--neutral-50); --text-mid-emphasis: var(--neutral-500); --text-low-emphasis: var(--neutral-700);
+  --icons-mid-emphasis: var(--neutral-500); --icons-low-emphasis: var(--neutral-700);
+  --card-background: #101011; --app-background: #090909;
+  --card-primary-background-light: #007aff26; --card-neutral-background: #1c1c1e;
+  --card-success-background-light: #56b68326; --card-error-background-light: #f1816926;
+  --border: #292929; --border-secondary: #3e3e3e; --background-secondary: #292929;
+  --widget-background: #101011; --widget-header-background: #161617;
+  --link-group-orange: var(--orange-400);
+  --depth-bid-fill: rgba(86,182,131,.22); --depth-ask-fill: rgba(241,129,105,.22);
+  --cell-border: var(--border);
+  --shadow-elevate: 0 0 0 1px rgba(255,255,255,.08), 0 6px 6px -3px rgba(0,0,0,.4), 0 24px 24px -12px rgba(0,0,0,.32), 0 24px 24px 2px rgba(0,0,0,.4);
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --terminal-v2-text: var(--neutral-50); --terminal-v2-muted: var(--neutral-500);
+  --dropdown-background: #1a1a1c; --dropdown-shadow: 0 8px 24px rgba(0,0,0,.32);
+  --primary-deep: var(--blue-300);
+  --text-high-emphasis: var(--neutral-50); --text-mid-emphasis: var(--neutral-500); --text-low-emphasis: var(--neutral-700);
+  --icons-mid-emphasis: var(--neutral-500); --icons-low-emphasis: var(--neutral-700);
+  --card-background: #101011; --app-background: #090909;
+  --card-primary-background-light: #007aff26; --card-neutral-background: #1c1c1e;
+  --card-success-background-light: #56b68326; --card-error-background-light: #f1816926;
+  --border: #292929; --border-secondary: #3e3e3e; --background-secondary: #292929;
+  --widget-background: #101011; --widget-header-background: #161617;
+  --link-group-orange: var(--orange-400);
+  --depth-bid-fill: rgba(86,182,131,.22); --depth-ask-fill: rgba(241,129,105,.22);
+  --cell-border: var(--border);
+  --shadow-elevate: 0 0 0 1px rgba(255,255,255,.08), 0 6px 6px -3px rgba(0,0,0,.4), 0 24px 24px -12px rgba(0,0,0,.32), 0 24px 24px 2px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--app-background); color: var(--text-high-emphasis);
+  font-family: var(--font); font-size: 12px; line-height: 16px; font-variant-numeric: tabular-nums;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px; box-sizing: border-box; overflow: hidden;
+}
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; letter-spacing: normal; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 1px solid var(--control-focus-border); outline-offset: -1px; }
+svg { display: block; }
+
+.app { height: 100%; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* Prototype bar: not part of the terminal, just the lab controls */
+.lab { display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap; color: var(--text-mid-emphasis); }
+.lab__title { color: var(--text-high-emphasis); font-weight: 500; }
+.lab__spacer { flex: 1; }
+.lab__badge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-background); }
+.lab__badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--long); }
+.lab__badge.-demo i { background: var(--orange-500); }
+.lab__badge.-loading i { background: var(--text-low-emphasis); animation: breathe 1s infinite alternate; }
+@keyframes breathe { to { opacity: .3; } }
+
+/* Buttons from the kit: -sm secondary, -no-border */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-background); color: var(--text-high-emphasis); font-weight: 500; white-space: nowrap; transition: background-color .1s ease-out; }
+.btn:hover { background: var(--card-neutral-background); }
+.btn.-ghost { border-color: transparent; background: transparent; color: var(--text-mid-emphasis); }
+.btn.-ghost:hover { color: var(--text-high-emphasis); background: var(--dropdown-hover); }
+.btn.-icon { width: 28px; padding: 0; }
+.btn[aria-expanded="true"], .btn.-on { background: var(--card-neutral-background); color: var(--text-high-emphasis); }
+.btn svg { width: 14px; height: 14px; }
+.btn .count { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--primary-accent); color: var(--text-light); font-size: 10px; line-height: 16px; text-align: center; }
+:root[data-theme="dark"] .btn, :root:not([data-theme="light"]) .btn { border-color: var(--border-secondary); }
+:root[data-theme="light"] .btn { border-color: var(--border); }
+
+/* Widget frame */
+.widget-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--widget-background); }
+.widget-frame__header { display: flex; align-items: center; gap: 6px; height: 32px; flex: none; padding: 0 6px; border-bottom: 1px solid var(--border); background: var(--widget-header-background); user-select: none; }
+.widget-frame__grip { color: var(--icons-low-emphasis); }
+.widget-frame__grip svg { width: 12px; height: 12px; }
+.widget-frame__title { color: var(--text-mid-emphasis); }
+.header-symbol { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: 6px; color: var(--text-high-emphasis); font-weight: 600; }
+.header-symbol:hover { background: var(--dropdown-hover); }
+.header-symbol i { width: 8px; height: 8px; border-radius: 50%; background: var(--link-group-orange); }
+.header-symbol small { font-weight: 400; color: var(--text-mid-emphasis); }
+.widget-frame__actions { margin-left: auto; display: flex; gap: 2px; }
+.widget-frame__actions .btn { height: 24px; width: 24px; }
+
+/* Toolbar (positions__toolbar) */
+.scr__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; flex: none; padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.scr__tabs { display: flex; gap: 4px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.scr__tabs::-webkit-scrollbar { display: none; }
+.tab { height: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-mid-emphasis); white-space: nowrap; flex: none; display: inline-flex; align-items: center; gap: 6px; font-weight: 400; }
+.tab:hover { color: var(--text-high-emphasis); }
+.tab[aria-pressed="true"] { background: var(--card-neutral-background); color: var(--text-high-emphasis); font-weight: 500; }
+.tab svg { width: 12px; height: 12px; }
+.tab .n { color: var(--text-low-emphasis); font-weight: 400; }
+.scr__actions { display: flex; align-items: center; gap: 8px; flex: none; }
+
+/* Search input (kit input -sm) */
+.search { position: relative; }
+.search input { height: 28px; width: 180px; max-width: 40vw; padding: 0 8px 0 28px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-background); color: var(--text-high-emphasis); }
+.search input::placeholder { color: var(--text-mid-emphasis); }
+.search input:hover { border-color: var(--primary-accent); }
+.search svg { position: absolute; left: 8px; top: 7px; width: 14px; height: 14px; color: var(--icons-mid-emphasis); pointer-events: none; }
+:root[data-theme="dark"] .search input, :root:not([data-theme="light"]) .search input { border-color: var(--border-secondary); }
+:root[data-theme="light"] .search input { border-color: var(--border); }
+
+/* Segmented period switch (dropdown-trigger look) */
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--card-neutral-background); }
+.seg button { height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--text-mid-emphasis); }
+.seg button[aria-pressed="true"] { background: var(--widget-background); color: var(--text-high-emphasis); font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.seg button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Filter strip */
+.scr__filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: none; padding: 6px 8px; border-bottom: 1px solid var(--border); background: var(--widget-header-background); }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 4px 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-background); color: var(--text-mid-emphasis); font-weight: 500; white-space: nowrap; }
+.chip b { color: var(--text-high-emphasis); font-weight: 500; }
+.chip button { display: inline-flex; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--icons-mid-emphasis); align-items: center; justify-content: center; }
+.chip button:hover { color: var(--text-error-accent); }
+.chip button svg { width: 12px; height: 12px; }
+:root[data-theme="dark"] .chip, :root:not([data-theme="light"]) .chip { border-color: var(--border-secondary); background: var(--background-secondary); }
+:root[data-theme="light"] .chip { border-color: var(--border); background: var(--card-background); }
+.scr__filters .muted { color: var(--text-mid-emphasis); }
+
+/* Table (widget-table + DataTable -sm) */
+.scr__body { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.trading-table { flex: 1; min-height: 0; overflow: auto; margin-right: 2px; scrollbar-gutter: stable; scrollbar-color: var(--border) var(--widget-background); }
+.trading-table table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+.trading-table th, .trading-table td { padding: 0 8px; vertical-align: middle; white-space: nowrap; }
+.trading-table th { position: sticky; top: 0; z-index: 10; height: 32px; background: var(--widget-header-background); color: var(--text-mid-emphasis); font-weight: 400; text-align: left; user-select: none; cursor: pointer; }
+.trading-table th.-end, .trading-table td.-end { text-align: right; }.trading-table th.-end { padding-left: 22px; }
+.trading-table th .lbl { position: relative; display: inline-block; }
+.trading-table th .srt { position: absolute; left: calc(100% + 2px); top: 1px; opacity: 0; width: 12px; height: 12px; }
+.trading-table th.-end .srt { left: auto; right: calc(100% + 2px); }
+.trading-table th:hover .srt, .trading-table th[aria-sort] .srt { opacity: 1; }
+.trading-table th[aria-sort] { color: var(--text-high-emphasis); }
+/* Mark price: running figure from the terminal control bar (AnimatedNumber.vue), tone="none":
+   the digits tween to the new value and the tick takes the side's colour at once, then the
+   figure fades back to the text colour. No resting colour: 517 rows would paint the whole column. */
+.mark-cell { display: inline-block; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mark-cell.-flash-up { animation: animated-number-flash-up var(--duration-base) var(--ease-standard); }
+.mark-cell.-flash-down { animation: animated-number-flash-down var(--duration-base) var(--ease-standard); }
+@keyframes animated-number-flash-up { from { color: var(--long); } }
+@keyframes animated-number-flash-down { from { color: var(--short); } }
+.level { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.level__px { color: var(--text-high-emphasis); }
+.trading-table td { height: var(--row-h); overflow: hidden; text-overflow: ellipsis; }
+.trading-table tr:hover td { background: var(--card-neutral-background); }
+.trading-table tr[aria-selected="true"] td { background: var(--card-primary-background-light); }
+.trading-table tr { cursor: pointer; }
+.trading-table td[data-pin], .trading-table th[data-pin] { position: sticky; background: var(--widget-background); }
+.trading-table th[data-pin] { background: var(--widget-header-background); z-index: 11; }
+.trading-table td[data-pin="left"], .trading-table th[data-pin="left"] { left: 0; }
+.trading-table td[data-pin="right"], .trading-table th[data-pin="right"] { right: 0; }
+.trading-table tr:hover td[data-pin] { background: var(--card-neutral-background); }
+.trading-table tr[aria-selected="true"] td[data-pin] { background: color-mix(in srgb, var(--primary-accent) 15%, var(--widget-background)); }
+.trading-table.-scrolled td[data-pin="left"], .trading-table.-scrolled th[data-pin="left"] { box-shadow: 4px 0 6px -4px var(--table-pin-shadow); }
+.pos { color: var(--long); } .neg { color: var(--short); } .dim { color: var(--text-low-emphasis); } .mid { color: var(--text-mid-emphasis); }
+.na { color: var(--text-low-emphasis); }
+
+.instrument-cell { display: flex; align-items: center; gap: 8px; }
+.star { display: inline-flex; width: 16px; height: 16px; padding: 0; border: 0; background: transparent; color: var(--icons-low-emphasis); opacity: 0; align-items: center; justify-content: center; flex: none; }
+.star svg { width: 12px; height: 12px; }
+tr:hover .star, .star.-on { opacity: 1; }
+.star.-on { color: var(--text-attention-accent); }
+.star:hover { color: var(--text-high-emphasis); }
+.instrument-cell__base { color: var(--text-high-emphasis); font-weight: 600; }
+.instrument-cell__rest { font-size: 10px; line-height: 12px; color: var(--text-low-emphasis); }
+.instrument-cell__text { display: flex; flex-direction: column; line-height: 1.2; }
+.spark { width: 72px; height: 22px; }
+.bar { display: inline-flex; align-items: center; gap: 6px; }
+.bar i { display: inline-block; width: 40px; height: 4px; border-radius: 2px; background: var(--card-neutral-background); position: relative; overflow: hidden; }
+.bar i b { position: absolute; top: 0; bottom: 0; left: 0; background: var(--long); border-radius: 2px; }
+.bar i b.-short { background: var(--short); }
+.badge { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 6px; font-size: 10px; line-height: 12px; font-weight: 500; }
+.badge.-sq { background: var(--card-primary-background-light); color: var(--primary-accent); }
+.badge.-ex { background: var(--card-error-background-light); color: var(--text-error-accent); }
+.row-menu-btn { opacity: 0; }
+tr:hover .row-menu-btn, .row-menu-btn[aria-expanded="true"] { opacity: 1; }
+.empty { padding: 24px; color: var(--text-mid-emphasis); text-align: center; }
+.skeleton { display: inline-block; width: 48px; height: 10px; border-radius: 4px; background: var(--card-neutral-background); animation: breathe 1s infinite alternate; }
+
+/* Status bar */
+.scr__status { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; flex: none; padding: 6px 8px; border-top: 1px solid var(--border); color: var(--text-mid-emphasis); background: var(--widget-header-background); }
+.scr__status b { color: var(--text-high-emphasis); font-weight: 500; }
+.scr__status .spacer { flex: 1; }
+
+/* Popovers (dropdown-surface + dropdown-row) */
+.pop { position: fixed; z-index: 100; min-width: 200px; padding: 4px; border-radius: 8px; background: var(--dropdown-background); color: var(--terminal-v2-text); box-shadow: var(--dropdown-shadow); }
+.pop[hidden] { display: none; }
+.pop__row { display: flex; align-items: center; gap: 8px; min-height: 32px; width: 100%; padding: 8px; border: 0; border-radius: 4px; background: transparent; color: var(--terminal-v2-text); text-align: left; }
+.pop__row:hover { background: var(--dropdown-hover); }
+.pop__row[aria-checked="true"] { font-weight: 500; }
+.pop__row .box { display: grid; place-items: center; width: 16px; height: 16px; flex: none; border: 1px solid var(--dropdown-border); border-radius: 4px; }
+.pop__row[aria-checked="true"] .box { border-color: transparent; }
+.pop__row .box svg { width: 12px; height: 12px; }
+.pop__row .hint { margin-left: auto; color: var(--terminal-v2-muted); font-size: 10px; }
+.pop__row.-danger { color: var(--text-error-accent); }
+.pop__group { padding: 10px 8px 4px; color: var(--terminal-v2-muted); font-size: 10px; line-height: 12px; letter-spacing: .4px; text-transform: uppercase; }
+.pop__sep { height: 1px; margin: 4px 0; background: var(--dropdown-border); }
+.pop__cols { display: grid; grid-template-columns: repeat(3, minmax(150px, 1fr)); gap: 0 8px; max-height: 60vh; overflow: auto; }
+.pop__wrap { display: grid; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 0 8px; }
+.sector { white-space: nowrap; }
+.pop__form { display: flex; gap: 6px; padding: 8px; flex-wrap: wrap; align-items: center; }
+.pop__form select, .pop__form input { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--dropdown-border); background: var(--dropdown-hover); color: var(--terminal-v2-text); }
+.pop__form input { width: 90px; }
+.pop__form .btn { border-color: transparent; background: var(--primary-accent); color: var(--text-light); }
+.pop__form .btn:hover { background: var(--primary-deep); }
+.pop__foot { display: flex; gap: 6px; padding: 8px; justify-content: flex-end; }
+
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 1500; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; background: var(--dark-background); color: var(--text-light); pointer-events: none; opacity: 0; transition: opacity .12s ease-out; }
+.toast.-show { opacity: 1; }
+.toast i { width: 8px; height: 8px; border-radius: 50%; background: var(--link-group-orange); }
+
+@media (max-width: 720px) {
+  .scr__tabs { flex-basis: 100%; }
+  .scr__actions { margin-left: auto; flex-wrap: wrap; }
+  .pop__cols { grid-template-columns: 1fr; }
+  .search input { width: 140px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-grip" viewBox="0 0 16 16"><path fill="currentColor" d="M2 3h12v1.5H2zM2 7.25h12v1.5H2zM2 11.5h12V13H2z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 16 16"><path fill="currentColor" d="M8 1.5l1.9 4.1 4.5.5-3.3 3 .9 4.4L8 11.3l-4 2.2.9-4.4-3.3-3 4.5-.5z"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M2 3h12l-4.5 5.5V13l-3-1.5V8.5z"/></symbol>
+  <symbol id="i-cols" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M2.5 2.5h11v11h-11zM6 2.5v11M10 2.5v11"/></symbol>
+  <symbol id="i-more" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r="1.4" fill="currentColor"/><circle cx="8" cy="8" r="1.4" fill="currentColor"/><circle cx="12.5" cy="8" r="1.4" fill="currentColor"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M4 10l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-theme" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2.5v11A5.5 5.5 0 0 0 8 2.5z" fill="currentColor"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.5-3.6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M13 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-max" viewBox="0 0 16 16"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+</svg>
+
+<div class="app">
+  <div class="lab">
+    <span class="lab__title">Screener prototype v1</span>
+    <span class="lab__spacer"></span>
+    <span class="lab__badge -loading" id="dataBadge" hidden><i></i><span id="dataBadgeText">Loading</span></span>
+    <div class="seg" id="sourceSeg" role="group" aria-label="Data source" title="Server: the screener service, every column for every instrument. OKX: public REST from this browser, candles for the top 60 only. Demo: synthetic set.">
+      <button type="button" data-src="server">Server</button><button type="button" data-src="okx">OKX</button><button type="button" data-src="demo">Demo</button>
+    </div>
+    <button class="btn -ghost -icon" id="reloadBtn" title="Reload data"><svg><use href="#i-refresh"/></svg></button>
+    <button class="btn -ghost -icon" id="themeBtn" title="Toggle theme"><svg><use href="#i-theme"/></svg></button>
+  </div>
+
+  <section class="widget-frame" aria-label="Screener widget">
+    <div class="widget-frame__header">
+      <span class="widget-frame__grip"><svg><use href="#i-grip"/></svg></span>
+      <span class="widget-frame__title">Screener</span>
+      <button class="header-symbol" id="headerSymbol" title="Linked instrument group: chart, order book, order form follow this row"><i></i><span id="headerSymbolText">BTC</span><small id="headerSymbolRest">USDT SWAP</small></button>
+      <div class="widget-frame__actions">
+        <button class="btn -ghost -icon" title="Widget settings"><svg><use href="#i-gear"/></svg></button>
+        <button class="btn -ghost -icon" title="Maximize"><svg><use href="#i-max"/></svg></button>
+      </div>
+    </div>
+
+    <div class="scr__toolbar">
+      <label class="search"><svg><use href="#i-search"/></svg><input id="search" type="search" placeholder="Search symbol" aria-label="Search symbol" autocomplete="off"></label>
+      <div class="scr__tabs" id="presets" role="group" aria-label="Presets"></div>
+      <div class="scr__actions">
+        <div class="seg" id="period" role="group" aria-label="Change period">
+          <button data-p="5m" disabled title="Needs 5m candles, planned for v2">5m</button>
+          <button data-p="15m" disabled title="Needs 15m candles, planned for v2">15m</button>
+          <button data-p="1h">1h</button>
+          <button data-p="4h">4h</button>
+          <button data-p="24h">24h</button>
+        </div>
+        <button class="btn" id="filtersBtn" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-filter"/></svg>Filters<span class="count" id="filtersCount" hidden>0</span></button>
+        <button class="btn" id="colsBtn" aria-haspopup="true" aria-expanded="false"><svg><use href="#i-cols"/></svg>Columns</button>
+      </div>
+    </div>
+
+    <div class="scr__filters" id="filterStrip" hidden></div>
+
+    <div class="scr__body">
+      <div class="trading-table" id="tableWrap" tabindex="0" role="region" aria-label="Screener table">
+        <table id="table"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+      </div>
+    </div>
+
+    <div class="scr__status" id="status">
+      <span>Instruments <b id="stTotal">0</b></span>
+      <span>Shown <b id="stShown">0</b></span>
+      <span>Updated <b id="stUpdated">never</b></span>
+      <span class="spacer"></span>
+      <span id="stCoverage" class="mid"></span>
+    </div>
+  </section>
+</div>
+
+<div class="pop" id="popFilters" hidden></div>
+<div class="pop" id="popCols" hidden></div>
+<div class="pop" id="popRow" hidden></div>
+<div class="toast" id="toast"><i></i><span id="toastText"></span></div>
+
+<script>
+'use strict';
+/* ========================= Config ========================= */
+const OKX = 'https://www.okx.com/api/v5/';
+const TIER_B = 60;   // instruments with candle-based metrics
+const TIER_C = 24;   // instruments with book, OI history and taker flow
+const PERIODS = { '1h': 1, '4h': 4, '24h': 24 };
+const BTC_ID = 'BTC-USDT-SWAP';
+const QUOTES = ['USDT', 'USDC'];
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('scr.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('scr.' + k, JSON.stringify(v)); } catch {} },
+};
+
+/* ========================= State ========================= */
+const S = {
+  rows: new Map(),          // instId -> row
+  period: store.get('period', '1h'),
+  preset: store.get('preset', 'all'),
+  sort: { key: 'vol24', dir: 'desc' },
+  filters: [],
+  search: '',
+  watch: new Set(store.get('watch', [])),
+  visible: null,            // Set of column keys
+  selected: store.get('selected', BTC_ID),
+  source: store.get('source', 'server'),   // server | okx | demo
+  server: new URLSearchParams(location.search).get('server') || (/^https?:$/.test(location.protocol) ? location.origin : 'http://localhost:8090'),
+  poll: null,
+  es: null,                 // EventSource of /stream
+  loaded: null,             // what actually filled the table: server | okx | demo
+  serverCoverage: null,
+  live: false,
+  updated: null,
+  customPresets: store.get('customPresets', []),
+};
+
+/* ========================= Columns ========================= */
+const NA = null;
+// Mark price as a running figure, ported from terminal-front control bar
+// (useAnimatedNumber.js + AnimatedNumber.vue, tone="none"): the digits tween from the
+// value on screen to the new one over NUMBER_TWEEN_MS with a cubic ease-out and the tick
+// flashes the side's colour, then fades back to the text colour. A redraw without a
+// change (sort, search) neither tweens nor flashes.
+const NUMBER_TWEEN_MS = 200;
+const MARK_ANIM = new Map(); // instId -> { shown, to, from, startedAt, dir, flash }
+let markFrame = null;
+function canAnimateFrames() {
+  return !(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) && !document.hidden;
+}
+function markCell(r) {
+  if (r.mark == null || !isFinite(r.mark)) { MARK_ANIM.delete(r.instId); return na(); }
+  let s = MARK_ANIM.get(r.instId);
+  if (!s) { s = { shown: r.mark, to: r.mark, from: r.mark, startedAt: null, dir: '', flash: '' }; MARK_ANIM.set(r.instId, s); }
+  else if (r.mark !== s.to) {
+    s.from = s.shown; s.to = r.mark; s.dir = r.mark > s.from ? 'up' : 'down'; s.flash = s.dir;
+    if (canAnimateFrames()) { s.startedAt = performance.now(); runMarkTween(); }
+    else { s.shown = r.mark; s.startedAt = null; }
+  } else s.flash = '';
+  const cls = ['mark-cell', s.flash && '-flash-' + s.flash].filter(Boolean).join(' ');
+  return `<span class="${cls}">$${fmtPrice(s.shown)}</span>`;
+}
+function runMarkTween() {
+  if (markFrame !== null) return;
+  const tb = $('tbody');
+  const step = now => {
+    let active = false;
+    for (const [id, s] of MARK_ANIM) {
+      if (s.startedAt == null) continue;
+      const p = Math.min(1, (now - s.startedAt) / NUMBER_TWEEN_MS);
+      const eased = 1 - (1 - p) ** 3;
+      s.shown = p >= 1 ? s.to : s.from + (s.to - s.from) * eased;
+      if (p >= 1) s.startedAt = null; else active = true;
+      const el = tb.querySelector(`tr[data-id="${id}"] .mark-cell`);
+      if (el) el.textContent = '$' + fmtPrice(s.shown);
+    }
+    markFrame = active ? requestAnimationFrame(step) : null;
+  };
+  markFrame = requestAnimationFrame(step);
+}
+const COLS = [
+  { key: 'symbol', group: 'Instrument', label: 'Symbol', pin: 'left', def: true, width: 150, title: 'Instrument. Click a row to switch the linked chart, order book and order form.' },
+  { key: 'spark', group: 'Instrument', label: '24h', def: true, title: 'Last 24 hours of hourly closes against the price 24 hours ago: green above it, red below.' },
+  { key: 'sector', group: 'Instrument', label: 'Sector', def: true, text: true, title: 'Crypto sector from CoinGecko categories (one per coin: Stable, Meme, Exchange, L2, L1, AI, RWA, DePIN, Gaming, Privacy, DeFi, Infra, Other). Stocks, indices, commodities and pre-market contracts show their asset class.', fmt: r => sectorCell(r), val: r => sectorKey(r) },
+  { key: 'class', group: 'Instrument', label: 'Class', def: false, text: true, title: 'Asset class as the venue lists it: crypto, stock (tokenised equities, ETFs, indices), commodity, pre-market.', fmt: r => r.cls ? `<span class="mid">${CLASS_LABEL[r.cls] || r.cls}</span>` : na(), val: r => r.cls || null },
+  { key: 'mark', group: 'Price', label: 'Mark', end: true, def: true, title: 'Mark price in USD: the price liquidations and PnL are computed from.', fmt: r => markCell(r), val: r => r.mark },
+  { key: 'chgP', group: 'Price', label: () => `Chg ${S.period}`, end: true, def: true, title: 'Price change over the selected period.', fmt: r => fmtPct(P(r, 'chg')), val: r => P(r, 'chg') },
+  { key: 'chg1d', group: 'Price', label: 'Chg 1D', end: true, def: true, title: 'Change against yesterday\'s UTC daily close. Server definition; the browser source uses the rolling 24h open.', fmt: r => fmtPct(r.chg1d), val: r => r.chg1d },
+  { key: 'chg7d', group: 'Price', label: 'Chg 7D', end: true, def: true, title: 'Change against the daily close 7 days ago.', fmt: r => fmtPct(r.chg7d), val: r => r.chg7d },
+  { key: 'chg30d', group: 'Price', label: 'Chg 30D', end: true, def: false, title: 'Change against the daily close 30 days ago.', fmt: r => fmtPct(r.chg30d), val: r => r.chg30d },
+  { key: 'basis', group: 'Price', label: 'Basis', end: true, def: false, title: 'Mark minus index, as a share of index. Premium of the perpetual over spot.', fmt: r => fmtPct(r.basis, 3), val: r => r.basis },
+  { key: 'vol24', group: 'Volume', label: 'Vol 24h', end: true, def: true, title: 'Traded volume over 24 hours in USD.', fmt: r => fmtUsd(r.vol24), val: r => r.vol24 },
+  { key: 'volx7', group: 'Volume', label: 'Vol × 7D', end: true, def: true, title: '24h volume divided by the average daily volume of the previous 7 days. Above 1 is busier than usual.', fmt: r => fmtX(r.volx7), val: r => r.volx7 },
+  { key: 'volxP', group: 'Volume', label: () => `Vol × ${S.period}`, end: true, def: false, title: 'Volume of the selected period against the average of the same period over the previous 7 days.', fmt: r => fmtX(P(r, 'volx')), val: r => P(r, 'volx') },
+  { key: 'oi', group: 'Open interest', label: 'OI', end: true, def: true, title: 'Open interest in USD.', fmt: r => fmtUsd(r.oi), val: r => r.oi },
+  { key: 'mcap', group: 'Capitalisation', label: 'Mcap', end: true, def: true, title: 'Market capitalisation in USD (crypto only, CoinGecko, refreshed every 30 minutes).', fmt: r => fmtUsd(r.mcap), val: r => r.mcap },
+  { key: 'fdv', group: 'Capitalisation', label: 'FDV', end: true, def: false, title: 'Fully diluted valuation in USD.', fmt: r => fmtUsd(r.fdv), val: r => r.fdv },
+  { key: 'mcapRank', group: 'Capitalisation', label: 'Rank', end: true, def: false, title: 'Market-cap rank among all coins.', fmt: r => r.mcapRank != null && isFinite(r.mcapRank) ? '#' + r.mcapRank : na(), val: r => r.mcapRank },
+  { key: 'volMcap', group: 'Capitalisation', label: 'Vol/Mcap', end: true, def: false, title: 'Volume 24h as a share of market cap: how much of the cap turns over per day.', fmt: r => fmtPct(r.volMcap, 1, false), val: r => r.volMcap },
+  { key: 'oiMcap', group: 'Capitalisation', label: 'OI/Mcap', end: true, def: false, title: 'Open interest as a share of market cap: leverage sitting on the coin.', fmt: r => fmtPct(r.oiMcap, 1, false), val: r => r.oiMcap },
+  { key: 'oiDP', group: 'Open interest', label: () => `OI Δ ${S.period}`, end: true, def: true, title: 'Change of open interest over the selected period. Read together with price change: up and up is new longs, down and up is a short squeeze.', fmt: r => fmtPct(P(r, 'oiD')), val: r => P(r, 'oiD') },
+  { key: 'oiD1d', group: 'Open interest', label: 'OI Δ 1D', end: true, def: true, title: 'Change of open interest over the last 24 hours, independent of the period switch.', fmt: r => fmtPct(r.p['24h'] && r.p['24h'].oiD), val: r => r.p['24h'] && r.p['24h'].oiD },
+  { key: 'oiVol', group: 'Open interest', label: 'OI / Vol', end: true, def: false, title: 'Open interest divided by 24h volume. High values mean positions are large against turnover.', fmt: r => fmtX(r.oiVol), val: r => r.oiVol },
+  { key: 'funding', group: 'Funding', label: 'Funding', end: true, def: true, title: 'Current funding rate per interval. Positive: longs pay shorts.', fmt: r => fmtFunding(r.funding), val: r => r.funding },
+  { key: 'fundingAnn', group: 'Funding', label: 'Funding APR', end: true, def: false, title: 'Current funding rate annualised with the instrument\'s funding interval.', fmt: r => fmtPct(r.fundingAnn, 1), val: r => r.fundingAnn },
+  { key: 'fundingNext', group: 'Funding', label: 'Next', end: true, def: false, title: 'Predicted next funding rate.', fmt: r => fmtFunding(r.fundingNext), val: r => r.fundingNext },
+  { key: 'atr', group: 'Volatility', label: 'ATR %', end: true, def: true, title: 'ATR 14 on hourly bars as a share of price. The normal hourly step of price, a stop size.', fmt: r => fmtPct(P(r, 'atr'), 2, false), val: r => P(r, 'atr') },
+  { key: 'rv24', group: 'Volatility', label: 'RV 24h', end: true, def: false, title: 'Realised volatility: standard deviation of the last 24 hourly log returns, annualised.', fmt: r => fmtPct(r.rv24, 0, false), val: r => r.rv24 },
+  { key: 'regime', group: 'Volatility', label: 'Vol regime', end: true, def: true, title: 'Today\'s true range against the median daily true range of the last 20 days. Below 0.6 is a squeeze, above 1.6 is expansion.', fmt: r => fmtRegime(r.regime), val: r => r.regime },
+  { key: 'range1d', group: 'Volatility', label: 'Range 1D', end: true, def: false, title: 'Today\'s UTC high minus low as a share of the low.', fmt: r => fmtPct(r.range1d, 1, false), val: r => r.range1d },
+  { key: 'toHigh', group: 'Volatility', label: 'To High', end: true, def: false, title: 'Distance from price up to the 30-day high.', fmt: r => fmtPct(r.toHigh, 1, false), val: r => r.toHigh },
+  { key: 'toLow', group: 'Volatility', label: 'To Low', end: true, def: false, title: 'Distance from price down to the 30-day low.', fmt: r => fmtPct(r.toLow, 1, false), val: r => r.toLow },
+  { key: 'takerP', group: 'Flow', label: () => `Taker buy ${S.period}`, def: true, title: 'Share of taker (market) volume that bought over the selected period, from the trade stream. Fills once the stream has run for the period.', fmt: r => fmtTaker(P(r, 'taker')), val: r => P(r, 'taker') },
+  { key: 'deltaP', group: 'Flow', label: () => `Delta ${S.period}`, end: true, def: true, title: 'Taker buy minus taker sell over the period, as a share of period volume. Net aggressive pressure, comparable across instruments.', fmt: r => fmtPct(P(r, 'delta'), 0), val: r => P(r, 'delta') },
+  { key: 'tradesP', group: 'Flow', label: () => `Trades ${S.period}`, end: true, def: false, title: 'Taker orders in the period, from the trade stream.', fmt: r => fmtCount(P(r, 'trades')), val: r => P(r, 'trades') },
+  { key: 'tape', group: 'Flow', label: 'Tape /min', end: true, def: true, title: 'Taker orders per minute over the last 5 minutes. The Ticks of the reference screener: how fast the tape runs right now.', fmt: r => fmtNum(r.tape, 1), val: r => r.tape },
+  { key: 'diverg', group: 'Flow', label: 'Divergence', def: false, title: 'Price and delta disagree over the period: price up with net selling, or price down with net buying.', fmt: r => fmtDiverg(r), val: r => divergVal(r) },
+  { key: 'vsBtc', group: 'Strength vs BTC', label: () => `vs BTC ${S.period}`, end: true, def: true, title: 'Instrument change minus BTC change over the period, in percentage points.', fmt: r => fmtPct(P(r, 'vsBtc')), val: r => P(r, 'vsBtc') },
+  { key: 'beta', group: 'Strength vs BTC', label: 'Beta', end: true, def: true, title: 'Slope of hourly returns on BTC hourly returns over 7 days. On a 1% BTC move the instrument moves beta percent.', fmt: r => fmtNum(r.beta, 2), val: r => r.beta },
+  { key: 'alpha', group: 'Strength vs BTC', label: 'Alpha 7D', end: true, def: false, title: 'Average hourly return above beta times BTC over 7 days, in percentage points.', fmt: r => fmtPct(r.alpha, 3), val: r => r.alpha },
+  { key: 'presence', group: 'Strength vs BTC', label: 'Presence', end: true, def: true, title: 'Share of the last 168 hours when the instrument beat BTC. 50% is noise.', fmt: r => fmtPct(r.presence, 0, false), val: r => r.presence },
+  { key: 'stay', group: 'Strength vs BTC', label: 'Stay', end: true, def: false, title: 'Of the hours when the instrument beat BTC, the share where it beat BTC again the next hour. Persistence of strength.', fmt: r => fmtPct(r.stay, 0, false), val: r => r.stay },
+  { key: 'corr', group: 'Strength vs BTC', label: 'Corr 7D', end: true, def: false, title: 'Correlation of hourly returns with BTC over 7 days.', fmt: r => fmtNum(r.corr, 2), val: r => r.corr },
+  { key: 'do', group: 'Levels', label: 'DO', end: true, def: true, title: 'Distance from price to today\'s UTC daily open. Positive: trading above the open.', fmt: r => fmtLevel(r.do), val: r => r.do && r.do.dist },
+  { key: 'wo', group: 'Levels', label: 'WO', end: true, def: true, title: 'Distance from price to the open of the current week (Monday 00:00 UTC).', fmt: r => fmtLevel(r.wo), val: r => r.wo && r.wo.dist },
+  { key: 'mo', group: 'Levels', label: 'MO', end: true, def: true, title: 'Distance from price to the open of the current month (UTC).', fmt: r => fmtLevel(r.mo), val: r => r.mo && r.mo.dist },
+  { key: 'ma50', group: 'Levels', label: 'MA 50', end: true, def: true, title: 'Distance from price to the 50-day simple moving average of daily closes. Hover for the level.', fmt: r => fmtLevel(r.ma50), val: r => r.ma50 && r.ma50.dist },
+  { key: 'ma100', group: 'Levels', label: 'MA 100', end: true, def: false, title: 'Distance from price to the 100-day simple moving average.', fmt: r => fmtLevel(r.ma100), val: r => r.ma100 && r.ma100.dist },
+  { key: 'ma200', group: 'Levels', label: 'MA 200', end: true, def: true, title: 'Distance from price to the 200-day simple moving average.', fmt: r => fmtLevel(r.ma200), val: r => r.ma200 && r.ma200.dist },
+  { key: 'depth01', group: 'Order book', label: 'Depth 0.1%', end: true, def: true, title: 'Resting bids plus asks within 0.1% of mid, in USD. What a market order of that size would walk through.', fmt: r => fmtUsd(r.depth01), val: r => r.depth01 },
+  { key: 'depth05', group: 'Order book', label: 'Depth 0.5%', end: true, def: false, title: 'Resting bids plus asks within 0.5% of mid, in USD.', fmt: r => fmtUsd(r.depth05), val: r => r.depth05 },
+  { key: 'imb', group: 'Order book', label: 'Imbalance', end: true, def: false, title: 'Bids minus asks over bids plus asks within 0.5%. Positive: more resting buy liquidity.', fmt: r => fmtPct(r.imb, 0), val: r => r.imb },
+  { key: 'spread', group: 'Order book', label: 'Spread', end: true, def: true, title: 'Best ask minus best bid in basis points of mid.', fmt: r => fmtBps(r.spread), val: r => r.spread },
+  { key: 'lev', group: 'Listing', label: 'Max lev', end: true, def: false, title: 'Maximum leverage the venue allows.', fmt: r => r.lev ? r.lev + '×' : na(), val: r => r.lev },
+  { key: 'listed', group: 'Listing', label: 'Listed', end: true, def: false, title: 'Days since listing.', fmt: r => r.listed != null ? r.listed + 'd' : na(), val: r => r.listed },
+  { key: 'actions', group: 'Instrument', label: '', pin: 'right', def: true, width: 36, title: '' },
+];
+const NUMERIC_COLS = COLS.filter(c => c.val && !c.text);
+const CLASS_LABEL = { crypto: 'Crypto', stock: 'Stock', premarket: 'Pre-market', commodity: 'Commodity', other: 'Other' };
+// Sector cell: the crypto sector, or the asset class for everything the sector taxonomy does not cover.
+function sectorKey(r) { return r.sector || (r.cls && r.cls !== 'crypto' ? CLASS_LABEL[r.cls] || r.cls : null); }
+function sectorCounts() { const m = new Map(); for (const r of S.rows.values()) if (r.sector) m.set(r.sector, (m.get(r.sector) || 0) + 1); return [...m.entries()].sort((a, b) => b[1] - a[1]); }
+function sectorCell(r) { const k = sectorKey(r); if (!k) return na(); const cls = r.sector ? '' : ' mid'; return `<span class="sector${cls}" title="${r.name ? r.name.replace(/"/g, '&quot;') : ''}">${k}</span>`; }
+const GROUP_ORDER = ['Instrument', 'Price', 'Volume', 'Open interest', 'Funding', 'Volatility', 'Flow', 'Strength vs BTC', 'Levels', 'Order book', 'Listing'];
+S.visible = new Set(store.get('cols', COLS.filter(c => c.def).map(c => c.key)));
+S.visible.add('symbol'); S.visible.add('actions');
+
+function P(r, metric) { const v = r.p && r.p[S.period]; return v ? v[metric] : undefined; }
+
+/* ========================= Presets ========================= */
+// Built-in categories are kept for later; only All ships now (owner decision, 31.10):
+// the chips row is hidden until a user saves a preset of their own.
+const BUILTIN_PRESETS = [
+  { id: 'all', label: 'All', filters: [], sort: { key: 'vol24', dir: 'desc' }, desc: 'Everything the terminal trades, by volume.' },
+  { id: 'movers', label: 'Movers', filters: [{ key: 'vol24', op: '>=', v: 20e6 }], sort: { key: 'chgP', dir: 'absdesc' }, desc: 'Largest moves over the period, thin instruments excluded.' },
+  { id: 'squeeze', label: 'Squeeze', filters: [{ key: 'regime', op: '<=', v: 0.8 }, { key: 'vol24', op: '>=', v: 20e6 }], sort: { key: 'regime', dir: 'asc' }, desc: 'Volatility compressed against its 30-day norm.' },
+  { id: 'quiet', label: 'Quiet', filters: [{ key: 'vol24', op: '>=', v: 50e6 }], sort: { key: 'atr', dir: 'asc' }, desc: 'Liquid instruments with the smallest normal step.' },
+  { id: 'liquid', label: 'Liquid', filters: [], sort: { key: 'depth01', dir: 'desc' }, desc: 'Deepest books near mid.' },
+  { id: 'strong', label: 'Strong vs BTC', filters: [{ key: 'vsBtc', op: '>=', v: 0 }, { key: 'presence', op: '>=', v: 0.55 }, { key: 'beta', op: '>=', v: 1 }], sort: { key: 'alpha', dir: 'desc' }, desc: 'Beating BTC now and most of the week, with beta above 1.' },
+  { id: 'weak', label: 'Weak vs BTC', filters: [{ key: 'vsBtc', op: '<=', v: 0 }, { key: 'presence', op: '<=', v: 0.45 }, { key: 'beta', op: '>=', v: 1 }], sort: { key: 'alpha', dir: 'asc' }, desc: 'Lagging BTC now and most of the week.' },
+  { id: 'funding', label: 'Funding', filters: [{ key: 'vol24', op: '>=', v: 20e6 }], sort: { key: 'fundingAnn', dir: 'absdesc' }, desc: 'Most skewed funding, either side.' },
+  { id: 'watch', label: 'Watchlist', star: true, filters: [], sort: { key: 'vol24', dir: 'desc' }, desc: 'Starred instruments.' },
+];
+const PRESETS = BUILTIN_PRESETS.slice(0, 1);
+function allPresets() { return PRESETS.concat(S.customPresets); }
+function applyPreset(id) {
+  const p = allPresets().find(x => x.id === id) || PRESETS[0];
+  S.preset = p.id; S.filters = p.filters.map(f => ({ ...f })); S.sort = { ...p.sort };
+  store.set('preset', S.preset);
+  render();
+}
+
+/* ========================= Formatting ========================= */
+const na = () => '<span class="na">—</span>';
+function fmtUsd(v) { if (v == null || !isFinite(v)) return na(); const a = Math.abs(v); const s = a >= 1e12 ? (v / 1e12).toFixed(2) + 'T' : a >= 1e9 ? (v / 1e9).toFixed(a >= 1e11 ? 0 : 2) + 'B' : a >= 1e6 ? (v / 1e6).toFixed(a >= 1e8 ? 0 : 1) + 'M' : a >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v.toFixed(0); return '$' + s; }
+function fmtPrice(v) { if (v == null || !isFinite(v)) return na(); const d = v >= 1000 ? 1 : v >= 100 ? 2 : v >= 1 ? 3 : v >= 0.01 ? 5 : 7; return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function fmtPct(v, d = 2, signed = true) { if (v == null || !isFinite(v)) return na(); const x = v * 100; const s = (signed && x > 0 ? '+' : '') + x.toFixed(d) + '%'; const cls = !signed ? '' : x > 0.0005 ? 'pos' : x < -0.0005 ? 'neg' : 'mid'; return `<span class="${cls}">${s}</span>`; }
+function fmtFunding(v) { if (v == null || !isFinite(v)) return na(); const x = v * 100; const cls = x > 0.01 ? 'neg' : x < -0.005 ? 'pos' : 'mid'; return `<span class="${cls}" title="Positive funding: longs pay">${(x > 0 ? '+' : '') + x.toFixed(4)}%</span>`; }
+function fmtX(v) { if (v == null || !isFinite(v)) return na(); const cls = v >= 2 ? 'pos' : v < 0.6 ? 'dim' : ''; return `<span class="${cls}">${v.toFixed(v >= 10 ? 0 : 2)}×</span>`; }
+function fmtNum(v, d) { return v == null || !isFinite(v) ? na() : v.toFixed(d); }
+function fmtBps(v) { return v == null || !isFinite(v) ? na() : v.toFixed(v < 10 ? 1 : 0) + ' bps'; }
+function fmtRegime(v) { if (v == null || !isFinite(v)) return na(); const tag = v <= 0.7 ? '<span class="badge -sq">squeeze</span>' : v >= 1.5 ? '<span class="badge -ex">expansion</span>' : ''; return `${v.toFixed(2)}× ${tag}`; }
+function fmtTaker(v) { if (v == null || !isFinite(v)) return na(); const w = Math.round(v * 100); return `<span class="bar"><i><b style="width:${w}%"></b></i>${w}%</span>`; }
+function divergVal(r) { const c = P(r, 'chg'), d = P(r, 'delta'); if (c == null || d == null) return null; if (c > 0.001 && d < -0.05) return -1; if (c < -0.001 && d > 0.05) return 1; return 0; }
+function fmtDiverg(r) { const v = divergVal(r); if (v == null) return na(); return v > 0 ? '<span class="pos">absorbing</span>' : v < 0 ? '<span class="neg">distributing</span>' : '<span class="dim">none</span>'; }
+function fmtLevel(l) { if (!l || l.dist == null || !isFinite(l.dist)) return na(); return `<span class="level"><span class="level__px">${fmtPrice(l.px)}</span>${fmtPct(l.dist)}</span>`; }
+function fmtCount(v) { if (v == null || !isFinite(v)) return na(); return v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'K' : String(Math.round(v)); }
+function fmtTime(ts) { return ts ? new Date(ts).toLocaleTimeString('en-GB') : 'never'; }
+function fmtFilterValue(key, v) { const c = COLS.find(x => x.key === key); if (!c) return v; if (['vol24', 'oi', 'depth01', 'depth05'].includes(key)) return fmtUsd(v).replace(/<[^>]+>/g, ''); if (['volx7', 'volxP', 'oiVol', 'regime', 'beta', 'corr'].includes(key)) return v + '×'.replace('×', key === 'beta' || key === 'corr' ? '' : '×'); if (key === 'spread') return v + ' bps'; if (key === 'mark') return v; if (c.text) return CLASS_LABEL[v] || v; return (v * 100).toFixed(2).replace(/\.00$/, '') + '%'; }
+
+/* ========================= Metrics ========================= */
+function closes(c) { return c.map(k => +k[4]); }
+function atrPct(candles, len, px) { // candles oldest-first [ts,o,h,l,c,...]
+  if (!candles || candles.length < len + 1) return null;
+  let s = 0; for (let i = candles.length - len; i < candles.length; i++) { const h = +candles[i][2], l = +candles[i][3], pc = +candles[i - 1][4]; s += Math.max(h - l, Math.abs(h - pc), Math.abs(l - pc)); }
+  return s / len / px;
+}
+function aggregate(c1h, n) { const out = []; for (let i = c1h.length - n; i >= 0; i -= n) { const seg = c1h.slice(i, i + n); out.unshift([seg[0][0], seg[0][1], Math.max(...seg.map(k => +k[2])), Math.min(...seg.map(k => +k[3])), seg[seg.length - 1][4], seg.reduce((a, k) => a + +k[5], 0), 0, seg.reduce((a, k) => a + +(k[7] || 0), 0)]); } return out; }
+function returns(cl) { const r = []; for (let i = 1; i < cl.length; i++) r.push(cl[i] / cl[i - 1] - 1); return r; }
+function stats(x, y) { // x: instrument returns, y: btc returns (aligned)
+  const n = Math.min(x.length, y.length); if (n < 24) return {};
+  x = x.slice(-n); y = y.slice(-n);
+  const mx = x.reduce((a, b) => a + b, 0) / n, my = y.reduce((a, b) => a + b, 0) / n;
+  let cov = 0, vx = 0, vy = 0; for (let i = 0; i < n; i++) { cov += (x[i] - mx) * (y[i] - my); vx += (x[i] - mx) ** 2; vy += (y[i] - my) ** 2; }
+  const beta = vy ? cov / vy : null, corr = vx && vy ? cov / Math.sqrt(vx * vy) : null;
+  let alpha = 0, pres = 0, stayN = 0, stayD = 0;
+  for (let i = 0; i < n; i++) { alpha += x[i] - (beta || 0) * y[i]; const beat = x[i] > y[i]; if (beat) pres++; if (i > 0 && x[i - 1] > y[i - 1]) { stayD++; if (beat) stayN++; } }
+  return { beta, corr, alpha: alpha / n, presence: pres / n, stay: stayD ? stayN / stayD : null };
+}
+function computeCandleMetrics(r, btc1h) {
+  const c1 = r.c1h, cd = r.c1d; if (!c1 || c1.length < 30) return;
+  const cl = closes(c1), n = cl.length, px = r.mark || cl[n - 1];
+  r.p = r.p || {};
+  const btcCl = btc1h ? closes(btc1h) : null;
+  for (const [p, h] of Object.entries(PERIODS)) {
+    const o = r.p[p] = r.p[p] || {};
+    if (n > h) o.chg = px / cl[n - 1 - h] - 1;
+    if (btcCl && btcCl.length > h) o.vsBtc = o.chg - (btcCl[btcCl.length - 1] / btcCl[btcCl.length - 1 - h] - 1);
+    // volume of the last h hours vs average of same window over previous 7 days
+    const qv = c1.map(k => +(k[7] || 0) || +k[6] * +k[4]);
+    if (n >= h * 8) { const last = qv.slice(-h).reduce((a, b) => a + b, 0); let s = 0; for (let w = 1; w <= 7; w++) s += qv.slice(n - h * (w + 1), n - h * w).reduce((a, b) => a + b, 0); o.volx = s ? last / (s / 7) : null; }
+    const tf = h === 24 ? cd : h === 4 ? aggregate(c1, 4) : c1;
+    o.atr = atrPct(tf, 14, px);
+  }
+  const r1 = returns(cl.slice(-25)); const m = r1.reduce((a, b) => a + b, 0) / r1.length;
+  r.rv24 = Math.sqrt(r1.reduce((a, b) => a + (b - m) ** 2, 0) / (r1.length - 1)) * Math.sqrt(24 * 365);
+  r.spark = cl.slice(-24);
+  if (btcCl && r.instId !== BTC_ID) Object.assign(r, stats(returns(cl.slice(-169)), returns(btcCl.slice(-169))));
+  else if (r.instId === BTC_ID) Object.assign(r, { beta: 1, corr: 1, alpha: 0, presence: null, stay: null });
+  if (cd && cd.length >= 8) { const d = closes(cd); r.chg7d = px / d[d.length - 8] - 1; if (d.length >= 31) r.chg30d = px / d[d.length - 31] - 1;
+    const qd = cd.map(k => +(k[7] || 0) || +k[6] * +k[4]); const prev = qd.slice(-8, -1); const avg = prev.reduce((a, b) => a + b, 0) / prev.length; r.volx7 = avg && r.vol24 ? r.vol24 / avg : null;
+    // regime: today's ATR14 vs median of rolling ATR14 over the window
+    const atrs = []; for (let i = 15; i <= cd.length; i++) atrs.push(atrPct(cd.slice(0, i), 14, +cd[i - 1][4])); const cur = atrs[atrs.length - 1]; const sorted = atrs.filter(x => x != null).sort((a, b) => a - b); const med = sorted[Math.floor(sorted.length / 2)]; r.regime = cur && med ? cur / med : null; }
+}
+function computeBookMetrics(r, book) {
+  const asks = book.asks.map(l => [+l[0], +l[1]]), bids = book.bids.map(l => [+l[0], +l[1]]); if (!asks.length || !bids.length) return;
+  const mid = (asks[0][0] + bids[0][0]) / 2, ct = r.ctVal || 1;
+  r.spread = (asks[0][0] - bids[0][0]) / mid * 1e4;
+  const band = (lv, pct, side) => lv.filter(([p]) => side > 0 ? p <= mid * (1 + pct) : p >= mid * (1 - pct)).reduce((a, [p, q]) => a + p * q * ct, 0);
+  const a1 = band(asks, 0.001, 1), b1 = band(bids, 0.001, -1), a5 = band(asks, 0.005, 1), b5 = band(bids, 0.005, -1);
+  r.depth01 = a1 + b1; r.depth05 = a5 + b5; r.imb = (a5 + b5) ? (b5 - a5) / (a5 + b5) : null;
+}
+function computeOiHistory(r, hist) { // newest first [ts, oi, oiCcy, oiUsd]
+  r.p = r.p || {}; const now = +hist[0][3] || +hist[0][2] * r.mark;
+  for (const [p, h] of Object.entries(PERIODS)) { if (hist.length > h) { const past = +hist[h][3] || +hist[h][2] * r.mark; (r.p[p] = r.p[p] || {}).oiD = past ? now / past - 1 : null; } }
+}
+function computeTaker(r, pts) { // newest first [ts, sell, buy]
+  r.p = r.p || {};
+  for (const [p, h] of Object.entries(PERIODS)) { const seg = pts.slice(0, h); let b = 0, s = 0; for (const k of seg) { s += +k[1]; b += +k[2]; } const o = r.p[p] = r.p[p] || {}; if (b + s > 0) { o.taker = b / (b + s); o.delta = (b - s) / (b + s); } }
+}
+
+/* ========================= OKX fetching ========================= */
+function queue(perSecond) { let last = 0; const gap = 1000 / perSecond; return async fn => { const wait = Math.max(0, last + gap - Date.now()); last = Date.now() + wait; if (wait) await new Promise(r => setTimeout(r, wait)); return fn(); }; }
+const qCandles = queue(14), qBooks = queue(14);
+async function okx(path) { const res = await fetch(OKX + path, { cache: 'no-store' }); if (!res.ok) throw new Error(path + ' ' + res.status); const j = await res.json(); if (j.code !== '0') throw new Error(path + ' ' + j.msg); return j.data; }
+
+async function loadLive() {
+  setBadge('loading', 'Loading OKX');
+  const [tickers, oi, funding, marks, idxUsdt, instruments] = await Promise.all([
+    okx('market/tickers?instType=SWAP'), okx('public/open-interest?instType=SWAP'), okx('public/funding-rate?instId=ANY'),
+    okx('public/mark-price?instType=SWAP'), okx('market/index-tickers?quoteCcy=USDT'), okx('public/instruments?instType=SWAP'),
+  ]);
+  const inst = new Map(instruments.map(i => [i.instId, i])); const oiM = new Map(oi.map(o => [o.instId, o])); const fM = new Map(funding.map(f => [f.instId, f])); const mM = new Map(marks.map(m => [m.instId, +m.markPx])); const iM = new Map(idxUsdt.map(i => [i.instId, +i.idxPx]));
+  const rows = new Map();
+  for (const t of tickers) {
+    const [base, quote, kind] = t.instId.split('-'); if (kind !== 'SWAP' || !QUOTES.includes(quote)) continue;
+    const i = inst.get(t.instId); if (i && i.state !== 'live') continue;
+    const last = +t.last, mark = mM.get(t.instId) || last; const f = fM.get(t.instId) || {}; const o = oiM.get(t.instId);
+    const interval = f.fundingTime && f.nextFundingTime ? (+f.nextFundingTime - +f.fundingTime) / 36e5 : 8;
+    const idx = iM.get(`${base}-USDT`);
+    const r = { instId: t.instId, base, quote, last, mark, chg1d: +t.open24h ? last / +t.open24h - 1 : null, high24: +t.high24h, low24: +t.low24h,
+      vol24: +t.volCcy24h * last, oi: o ? (+o.oiUsd || +o.oiCcy * mark) : null, funding: f.fundingRate ? +f.fundingRate : null, fundingNext: f.nextFundingRate ? +f.nextFundingRate : null,
+      fundingInterval: interval, ctVal: i ? +i.ctVal : 1, lev: i ? +i.lever : null, listed: i && i.listTime ? Math.floor((Date.now() - +i.listTime) / 864e5) : null, basis: idx ? mark / idx - 1 : null, tier: 'A', p: {} };
+    r.fundingAnn = r.funding != null ? r.funding * (24 / interval) * 365 : null; r.oiVol = r.oi && r.vol24 ? r.oi / r.vol24 : null;
+    r.range1d = r.high24 && r.low24 ? (r.high24 - r.low24) / mark : null; r.toHigh = r.high24 ? r.high24 / mark - 1 : null; r.toLow = r.low24 ? 1 - r.low24 / mark : null;
+    rows.set(t.instId, r);
+  }
+  S.rows = rows; S.live = true; S.loaded = 'okx'; S.updated = Date.now(); accumulateOi(rows); render(); setBadge('live', 'Live OKX');
+  // Tier B: candles for the top by volume, BTC first
+  const ranked = [...rows.values()].sort((a, b) => b.vol24 - a.vol24);
+  const tierB = ranked.slice(0, TIER_B); if (!tierB.includes(rows.get(BTC_ID)) && rows.get(BTC_ID)) tierB.unshift(rows.get(BTC_ID));
+  const btc = rows.get(BTC_ID);
+  const c1 = await qCandles(() => okx(`market/candles?instId=${BTC_ID}&bar=1H&limit=200`)).catch(() => null); if (btc && c1) btc.c1h = c1.slice().reverse();
+  const btc1h = btc && btc.c1h;
+  let done = 0; const total = tierB.length;
+  await Promise.all(tierB.map(async r => {
+    try {
+      const [h, d] = await Promise.all([r.instId === BTC_ID && r.c1h ? r.c1h : qCandles(() => okx(`market/candles?instId=${r.instId}&bar=1H&limit=200`)).then(x => x.slice().reverse()), qCandles(() => okx(`market/candles?instId=${r.instId}&bar=1Dutc&limit=40`)).then(x => x.slice().reverse())]);
+      r.c1h = h; r.c1d = d.filter(k => k[8] === '1').concat(d.slice(-1)[0][8] === '0' ? [d.slice(-1)[0]] : []); r.tier = 'B'; computeCandleMetrics(r, btc1h);
+    } catch (e) { console.warn(e); }
+    if (++done % 10 === 0 || done === total) render();
+  }));
+  // Tier C: order books. OKX serves OI history and taker flow (rubik endpoints) without CORS headers,
+  // so a browser cannot read them: those columns wait for the market-data server. OI change is
+  // approximated from snapshots this page accumulates while it is open.
+  const tierC = ranked.slice(0, TIER_C); done = 0;
+  await Promise.all(tierC.map(async r => {
+    await qBooks(() => okx(`market/books?instId=${r.instId}&sz=400`)).then(b => computeBookMetrics(r, b[0])).catch(e => console.warn(String(e)));
+    r.tier = 'C'; if (++done % 6 === 0 || done === tierC.length) render();
+  }));
+  S.updated = Date.now(); render();
+}
+// Hourly OI snapshots per instrument, kept for 26 hours in this browser.
+function accumulateOi(rows) {
+  const hist = store.get('oiHist', {}); const now = Date.now(); const hour = Math.floor(now / 36e5);
+  for (const r of rows.values()) { if (!r.oi) continue; const h = hist[r.instId] = (hist[r.instId] || []).filter(p => hour - p[0] <= 26); if (!h.length || h[h.length - 1][0] !== hour) h.push([hour, r.oi]); else h[h.length - 1][1] = r.oi; }
+  for (const k of Object.keys(hist)) if (!rows.has(k)) delete hist[k];
+  store.set('oiHist', hist);
+  for (const r of rows.values()) { const h = hist[r.instId]; if (!h || h.length < 2) continue; r.p = r.p || {};
+    for (const [p, hrs] of Object.entries(PERIODS)) { const past = h.find(x => hour - x[0] >= hrs) || null; if (past) (r.p[p] = r.p[p] || {}).oiD = r.oi / past[1] - 1; } }
+}
+
+/* ========================= Screener service ========================= */
+// Maps one row of GET /screener (api/screener.md) onto the prototype's row shape.
+function fromServer(row) {
+  const r = { instId: row.instId, base: row.symbol, quote: row.settle, last: row.last, mark: row.mark, chg1d: row.chg1d, chg7d: row.chg7d, chg30d: row.chg30d,
+    vol24: row.vol24, volx7: row.volx7, oi: row.oi, oiVol: row.oiVol, funding: row.funding, fundingNext: row.fundingNext, fundingAnn: row.fundingAnn, fundingInterval: row.fundingInterval,
+    cls: row.class || null, name: row.name || null, sector: row.sector || null, mcap: row.mcap, fdv: row.fdv, mcapRank: row.mcapRank, volMcap: row.volMcap, oiMcap: row.oiMcap,
+    lev: row.lev, listed: row.listed != null ? Math.floor(row.listed) : null, basis: row.basis, rv24: row.rv24, regime: row.regime, range1d: row.range1d,
+    toHigh: row.toHigh != null ? -row.toHigh : null, toLow: row.toLow, beta: row.beta, alpha: row.alpha, presence: row.presence, stay: row.stay, corr: row.corr,
+    do: row.do, wo: row.wo, mo: row.mo, ma50: row.ma50, ma100: row.ma100, ma200: row.ma200,
+    depth01: row.depth01, depth05: row.depth05, imb: row.imb, spread: row.spread, spark: row.spark && row.spark.length > 1 ? row.spark : null, tape: row.tape, cov: row.cov, tier: 'C', p: {} };
+  for (const per of Object.keys(PERIODS)) {
+    r.p[per] = { chg: row.chg[per], volx: row.volx[per], oiD: row.oiD[per], vsBtc: row.vsBtc[per], atr: row.atr, taker: row.takerBuy[per], delta: row.delta[per], trades: row.trades ? row.trades[per] : null };
+  }
+  return r;
+}
+async function fetchServer() {
+  const res = await fetch(S.server.replace(/\/$/, '') + '/screener', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`screener service ${res.status}`);
+  applyServer(await res.json());
+}
+function applyServer(d) {
+  const rows = new Map(); for (const row of d.rows) rows.set(row.instId, fromServer(row));
+  const sel = S.selected; S.rows = rows; S.live = true; S.loaded = 'server'; S.updated = d.ts; S.serverCoverage = d.coverage; S.selected = sel;
+}
+async function loadServer() {
+  setBadge('loading', 'Connecting');
+  await fetchServer(); render(); setBadge('server', 'Server');
+  clearInterval(S.poll); if (S.es) { S.es.close(); S.es = null; }
+  // Live updates: the service pushes one `rows` event per recompute (about every second);
+  // polling every 5 s is the fallback while the stream is down.
+  const startPoll = () => { if (S.poll) return; S.poll = setInterval(async () => { try { await fetchServer(); render(); setBadge('server', 'Server'); } catch (e) { setBadge('loading', 'Server unreachable, retrying'); } }, 5000); };
+  if (typeof EventSource === 'function') {
+    const es = S.es = new EventSource(S.server.replace(/\/$/, '') + '/stream');
+    es.addEventListener('rows', e => { try { applyServer(JSON.parse(e.data)); render(); setBadge('server', 'Server'); } catch (err) { console.warn(err); } });
+    es.addEventListener('error', () => { setBadge('loading', 'Stream reconnecting'); startPoll(); });
+    es.addEventListener('open', () => { clearInterval(S.poll); S.poll = null; });
+  } else startPoll();
+}
+
+/* ========================= Demo data ========================= */
+function demoRows() {
+  let seed = 20261031; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647; const gauss = () => (rnd() + rnd() + rnd() + rnd() - 2) * 1.2;
+  const bases = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB', 'ADA', 'AVAX', 'LINK', 'SUI', 'HYPE', 'ZEC', 'ENA', 'NEAR', 'PUMP', 'LIT', 'PEPE', 'WIF', 'ARB', 'OP', 'APT', 'TIA', 'SEI', 'TON', 'TRX', 'LTC', 'BCH', 'DOT', 'UNI', 'AAVE', 'TAO', 'FET', 'RENDER', 'INJ', 'ONDO', 'JUP', 'WLD', 'ORDI', 'STX', 'FIL', 'ATOM', 'ETC', 'XLM', 'HBAR', 'ALGO', 'CRV', 'LDO', 'MKR', 'PENDLE', 'EIGEN', 'ETHFI', 'STRK', 'ZK', 'BLUR', 'JTO', 'PYTH', 'BOME', 'FLOKI', 'SHIB', 'BONK', 'NOT', 'TRUMP', 'VIRTUAL', 'AIXBT', 'KAITO', 'IP', 'BERA', 'S', 'MOVE', 'ME', 'PNUT', 'ACT', 'GOAT', 'POPCAT', 'MEW', 'NEIRO', 'CAT', 'TURBO', 'DOGS', 'HMSTR', 'CATI', 'BIGTIME', 'MAGIC', 'IMX', 'GALA', 'SAND', 'MANA', 'AXS', 'APE', 'GMT', 'DYDX', 'GMX', 'SNX', 'COMP', 'YFI', 'SUSHI', '1INCH', 'ZRO', 'W', 'OM', 'POL', 'KAS', 'ICP', 'XMR', 'RUNE', 'THETA', 'GRT', 'ENS', 'ARKM', 'TNSR', 'DRIFT', 'IO', 'ZRX', 'RAY', 'ORCA', 'JASMY', 'CHZ', 'ANKR', 'MINA', 'ROSE', 'CELO', 'KAVA', 'ZIL', 'ONE'];
+  const btcR = Array.from({ length: 200 }, () => gauss() * 0.004); const rows = new Map();
+  bases.forEach((b, i) => {
+    const px = b === 'BTC' ? 77600 : b === 'ETH' ? 2250 : Math.exp(gauss() * 2 + (i < 10 ? 2.5 : -0.5)); const beta = b === 'BTC' ? 1 : 0.6 + rnd() * 2.2; const own = 0.003 + rnd() * 0.012;
+    const r1 = b === 'BTC' ? btcR : btcR.map(x => beta * x + gauss() * own + (rnd() < 0.08 ? gauss() * 0.02 : 0));
+    const cl = []; let p = px / r1.reduce((a, x) => a * (1 + x), 1); for (const x of r1) { p *= 1 + x; cl.push(p); }
+    const c1h = cl.map((c, k) => { const o = k ? cl[k - 1] : c; const h = Math.max(o, c) * (1 + rnd() * own), l = Math.min(o, c) * (1 - rnd() * own); const q = (b === 'BTC' ? 2.5e8 : b === 'ETH' ? 1.2e8 : 3e7 / Math.pow(i + 1, 0.7)) * (0.5 + rnd()) * (k > 190 && rnd() < 0.3 ? 2.5 : 1); return [Date.now() - (200 - k) * 36e5, o, h, l, c, q / c, q / c, q, '1']; });
+    const c1d = aggregate(c1h.slice(-192), 24); const dayVol = c1d.map(k => +k[7]); for (let k = 0; k < 32; k++) { const o = c1d[0][1] * (1 + gauss() * own * 4); c1d.unshift([c1d[0][0] - 864e5, o, Math.max(o, c1d[0][1]) * (1 + rnd() * own * 3), Math.min(o, c1d[0][1]) * (1 - rnd() * own * 3), c1d[0][1], 1, 1, dayVol[0] * (0.7 + rnd() * .6), '1']); }
+    const vol24 = dayVol[dayVol.length - 1] || 1e7; const mark = cl[cl.length - 1];
+    const r = { instId: `${b}-USDT-SWAP`, base: b, quote: 'USDT', last: mark, mark, chg1d: mark / cl[cl.length - 25] - 1, high24: Math.max(...cl.slice(-24)) * 1.002, low24: Math.min(...cl.slice(-24)) * .998, vol24, oi: vol24 * (0.3 + rnd() * 1.5), funding: (gauss() * 0.00012 + 0.00005), fundingInterval: 8, ctVal: 1, lev: [20, 50, 75, 100][Math.floor(rnd() * 4)], listed: Math.floor(30 + rnd() * 1500), basis: gauss() * 0.0004, tier: 'C', p: {}, c1h, c1d };
+    r.fundingNext = r.funding + gauss() * 0.00003; r.fundingAnn = r.funding * 3 * 365; r.oiVol = r.oi / vol24; r.range1d = (r.high24 - r.low24) / mark; r.toHigh = r.high24 / mark - 1; r.toLow = 1 - r.low24 / mark;
+    rows.set(r.instId, r);
+  });
+  const btc1h = rows.get(BTC_ID).c1h;
+  for (const r of rows.values()) {
+    computeCandleMetrics(r, btc1h);
+    const mid = r.mark, tick = mid * (0.00005 + rnd() * 0.0004); const depthScale = r.vol24 / 5000;
+    const mk = side => Array.from({ length: 60 }, (_, k) => [mid * (1 + side * (tick / mid + k * 0.0001)), depthScale * (0.5 + rnd()) / mid]);
+    computeBookMetrics(r, { asks: mk(1), bids: mk(-1) });
+    const oiNow = r.oi; const hist = [[0, 0, 0, oiNow]]; let o = oiNow; for (let k = 1; k < 30; k++) { o /= 1 + gauss() * 0.006; hist.push([0, 0, 0, o]); } computeOiHistory(r, hist);
+    const pts = Array.from({ length: 30 }, (_, k) => { const v = r.vol24 / 24; const skew = (r.p['1h'].chg || 0) * 8 + gauss() * 0.1; return [0, v * (0.5 - skew / 2), v * (0.5 + skew / 2)]; }); computeTaker(r, pts);
+  }
+  return rows;
+}
+function loadDemo() { S.rows = demoRows(); S.live = false; S.loaded = 'demo'; S.updated = Date.now(); setBadge('demo', 'Demo data'); render(); }
+
+/* ========================= Rendering ========================= */
+const $ = id => document.getElementById(id);
+function setBadge(kind, text) { const b = $('dataBadge'); b.className = 'lab__badge' + (kind === 'demo' ? ' -demo' : kind === 'loading' ? ' -loading' : ''); $('dataBadgeText').textContent = text; b.hidden = kind !== 'loading'; }
+function visibleCols() { return COLS.filter(c => S.visible.has(c.key)); }
+function colLabel(c) { return typeof c.label === 'function' ? c.label() : c.label; }
+function passes(r) {
+  if (S.search) { const q = S.search.toUpperCase().replace(/[^A-Z0-9,]/g, ''); const terms = q.split(',').filter(Boolean); if (terms.length && !terms.some(t => r.base.includes(t) || r.instId.replace(/-/g, '').includes(t))) return false; }
+  const preset = allPresets().find(p => p.id === S.preset); if (preset && preset.star && !S.watch.has(r.instId)) return false;
+  for (const f of S.filters) { const c = COLS.find(x => x.key === f.key); const v = c && c.val(r); if (f.op === 'is') { if (String(v || '').toLowerCase() !== String(f.v).toLowerCase()) return false; continue; } if (v == null || !isFinite(v)) return false; if (f.op === '>=' ? v < f.v : v > f.v) return false; }
+  return true;
+}
+function sortedRows() {
+  // No column chosen (third click on a header) = the preset's own order, with nothing marked in the head.
+  const active = S.sort.key ? S.sort : ((allPresets().find(p => p.id === S.preset) || PRESETS[0]).sort || {});
+  const c = COLS.find(x => x.key === active.key); const list = [...S.rows.values()].filter(passes);
+  if (!c || !c.val) return list;
+  const dir = active.dir; const v = r => { const x = c.val(r); if (typeof x === 'string') return x; return x == null || !isFinite(x) ? null : dir === 'absdesc' ? Math.abs(x) : x; };
+  list.sort((a, b) => { const x = v(a), y = v(b); if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1; if (typeof x === 'string' || typeof y === 'string') return dir === 'asc' ? String(x).localeCompare(String(y)) : String(y).localeCompare(String(x)); return dir === 'asc' ? x - y : y - x; });
+  // starred first inside the same list, like the reference watchlist, only on the All preset
+  if (S.preset === 'all') list.sort((a, b) => (S.watch.has(b.instId) ? 1 : 0) - (S.watch.has(a.instId) ? 1 : 0));
+  return list;
+}
+// Baseline of the sparkline: the price 24 h ago, recovered from the 24h change.
+function sparkBase(r) { const c = r.p && r.p['24h'] && r.p['24h'].chg; return c != null && isFinite(c) && r.last > 0 ? r.last / (1 + c) : r.spark[0]; }
+// 24 hourly closes against a baseline (the price 24 h ago): green above it, red below,
+// so the sign of the day and the path to it read without the number.
+function sparkline(vals, base) {
+  if (!vals || vals.length < 2) return '<span class="skeleton"></span>';
+  if (!(base > 0)) base = vals[0];
+  const w = 72, h = 22, min = Math.min(...vals, base), max = Math.max(...vals, base), span = max - min || 1;
+  const y = v => h - 2 - ((v - min) / span) * (h - 4);
+  const pts = vals.map((v, i) => [(i / (vals.length - 1)) * (w - 2) + 1, y(v)]);
+  const by = y(base).toFixed(1), x0 = pts[0][0].toFixed(1), x1 = pts[pts.length - 1][0].toFixed(1);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const area = d + ` L${x1} ${by} L${x0} ${by} Z`;
+  const id = 'sp' + Math.random().toString(36).slice(2, 8);
+  const last = vals[vals.length - 1], col = last >= base ? 'var(--long)' : 'var(--short)';
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><defs><clipPath id="${id}a"><rect x="0" y="0" width="${w}" height="${by}"/></clipPath><clipPath id="${id}b"><rect x="0" y="${by}" width="${w}" height="${h}"/></clipPath></defs>`
+    + `<line x1="${x0}" x2="${x1}" y1="${by}" y2="${by}" stroke="var(--border-secondary, var(--border))" stroke-width="1"/>`
+    + `<path d="${area}" fill="var(--long)" opacity=".16" clip-path="url(#${id}a)"/><path d="${area}" fill="var(--short)" opacity=".16" clip-path="url(#${id}b)"/>`
+    + `<path d="${d}" fill="none" stroke="var(--long)" stroke-width="1.2" clip-path="url(#${id}a)"/><path d="${d}" fill="none" stroke="var(--short)" stroke-width="1.2" clip-path="url(#${id}b)"/>`
+    + `<circle cx="${x1}" cy="${pts[pts.length - 1][1].toFixed(1)}" r="1.6" fill="${col}"/></svg>`;
+}
+function renderHead() {
+  const cols = visibleCols(); let prev = null;
+  $('thead').innerHTML = '<tr>' + cols.map(c => {
+    const grp = prev && prev !== c.group && c.key !== 'actions' ? ' -group' : ''; prev = c.group;
+    const sorted = S.sort.key === c.key; const aria = sorted ? ` aria-sort="${S.sort.dir === 'asc' ? 'ascending' : 'descending'}"` : '';
+    const icon = sorted ? `<svg class="srt"><use href="#${S.sort.dir === 'asc' ? 'i-up' : 'i-down'}"/></svg>` : `<svg class="srt"><use href="#i-down"/></svg>`;
+    const pin = c.pin ? ` data-pin="${c.pin}"` : ''; const w = c.width ? ` style="min-width:${c.width}px"` : '';
+    return `<th data-key="${c.key}" class="${c.end ? '-end' : ''}${grp}"${aria}${pin}${w} title="${(c.title || '').replace(/"/g, '&quot;')}"><span class="lbl">${colLabel(c)}${c.val ? icon : ''}</span></th>`;
+  }).join('') + '</tr>';
+}
+function renderBody() {
+  const cols = visibleCols(); const rows = sortedRows(); const tb = $('tbody');
+  if (!rows.length) { tb.innerHTML = `<tr><td colspan="${cols.length}" class="empty">${S.rows.size ? 'No instruments match the filters' : 'Loading instruments'}</td></tr>`; $('stShown').textContent = 0; return; }
+  const limit = 600; let prev;
+  tb.innerHTML = rows.slice(0, limit).map(r => {
+    prev = null;
+    const cells = cols.map(c => {
+      const grp = prev && prev !== c.group && c.key !== 'actions' ? ' -group' : ''; prev = c.group;
+      let html;
+      if (c.key === 'symbol') html = `<span class="instrument-cell"><button class="star${S.watch.has(r.instId) ? ' -on' : ''}" data-star="${r.instId}" title="${S.watch.has(r.instId) ? 'Remove from watchlist' : 'Add to watchlist'}" aria-pressed="${S.watch.has(r.instId)}"><svg><use href="#i-star"/></svg></button><span class="instrument-cell__text"><span class="instrument-cell__base">${r.base}</span><span class="instrument-cell__rest">${r.quote} SWAP</span></span></span>`;
+      else if (c.key === 'spark') html = r.spark ? sparkline(r.spark, sparkBase(r)) : (r.tier === 'A' && S.live ? '<span class="na" title="Candle metrics are loaded for the top 60 by volume">—</span>' : '<span class="skeleton"></span>');
+      else if (c.key === 'actions') html = `<button class="btn -ghost -icon row-menu-btn" data-menu="${r.instId}" title="Row actions" aria-haspopup="menu" aria-expanded="false"><svg><use href="#i-more"/></svg></button>`;
+      else html = c.fmt(r);
+      return `<td class="${c.end ? '-end' : ''}${grp}"${c.pin ? ` data-pin="${c.pin}"` : ''}>${html}</td>`;
+    }).join('');
+    return `<tr data-id="${r.instId}" aria-selected="${r.instId === S.selected}">${cells}</tr>`;
+  }).join('');
+  $('stShown').textContent = rows.length + (rows.length > limit ? ` (first ${limit} drawn)` : '');
+}
+function renderPresets() {
+  const rows = [...S.rows.values()]; const saved = { filters: S.filters, preset: S.preset, search: S.search };
+  $('presets').innerHTML = allPresets().map(p => {
+    S.filters = p.filters; S.preset = p.id; S.search = ''; const n = rows.filter(passes).length;
+    return `<button class="tab" data-preset="${p.id}" aria-pressed="${saved.preset === p.id}" title="${p.desc || ''}">${p.star ? '<svg><use href="#i-star"/></svg>' : ''}${p.label}<span class="n">${n}</span></button>`;
+  }).join('');
+  Object.assign(S, saved);
+  $('presets').hidden = allPresets().length < 2;
+}
+function renderFilters() {
+  const strip = $('filterStrip'); const preset = allPresets().find(p => p.id === S.preset);
+  const chips = S.filters.map((f, i) => { const c = COLS.find(x => x.key === f.key); return `<span class="chip"><b>${colLabel(c)}</b> ${f.op === '>=' ? '≥ ' : f.op === '<=' ? '≤ ' : ''}${fmtFilterValue(f.key, f.v)}<button data-rm="${i}" title="Remove filter"><svg><use href="#i-close"/></svg></button></span>`; });
+  const sortCol = COLS.find(x => x.key === S.sort.key);
+  const changed = preset && JSON.stringify(preset.filters) !== JSON.stringify(S.filters);
+  strip.hidden = !chips.length && S.preset === 'all';
+  strip.innerHTML = chips.join('') + `<span class="muted">${chips.length ? '' : 'No filters'}${sortCol ? ` sorted by ${colLabel(sortCol)} ${S.sort.dir === 'asc' ? 'ascending' : S.sort.dir === 'absdesc' ? 'by size' : 'descending'}` : ''}</span>` + (changed ? `<button class="btn -ghost" id="savePresetBtn">Save as preset</button>` : '') + (preset && preset.custom ? `<button class="btn -ghost" id="deletePresetBtn">Delete preset</button>` : '');
+  const n = S.filters.length; $('filtersCount').hidden = !n; $('filtersCount').textContent = n;
+}
+function renderStatus() {
+  $('stTotal').textContent = S.rows.size; $('stUpdated').textContent = fmtTime(S.updated);
+  const b = [...S.rows.values()].filter(r => r.tier !== 'A').length, c = [...S.rows.values()].filter(r => r.tier === 'C').length;
+  const cv = S.serverCoverage, n = S.rows.size;
+  const part = (name, v) => v >= n ? null : `${name} ${v}/${n}`;
+  $('stCoverage').textContent = S.loaded === 'server' && cv ? [part('Candles', cv.hourly), part('Books', cv.book), part('OI Δ', cv.oiHist), part('Flow', cv.flow)].filter(Boolean).join(', ')
+    : S.loaded === 'okx' ? `Candles top ${b}, books top ${c}` : '';
+  $('stCoverage').title = S.loaded === 'server' ? 'Rows with each data family. OI Δ needs an hour of history, flow columns fill once the trade stream has run for the period.' : S.loaded === 'okx' ? 'Browser source: candles and books only for the top instruments by volume, no trade flow.' : '';
+  document.querySelectorAll('#sourceSeg button').forEach(x => x.setAttribute('aria-pressed', x.dataset.src === S.source));
+  const sel = S.rows.get(S.selected); const [b2, q2] = S.selected.split('-'); $('headerSymbolText').textContent = b2; $('headerSymbolRest').textContent = `${q2} SWAP${sel ? '' : ''}`;
+}
+function render() { document.querySelectorAll('#period button').forEach(b => b.setAttribute('aria-pressed', b.dataset.p === S.period)); renderPresets(); renderFilters(); renderHead(); renderBody(); renderStatus(); }
+
+/* ========================= Popovers ========================= */
+let openPop = null;
+function placePop(pop, anchor, align = 'end') { pop.hidden = false; const a = anchor.getBoundingClientRect(); const r = pop.getBoundingClientRect(); let left = align === 'end' ? a.right - r.width : a.left; left = Math.max(8, Math.min(left, innerWidth - r.width - 8)); let top = a.bottom + 4; if (top + r.height > innerHeight - 8) top = Math.max(8, a.top - r.height - 4); pop.style.left = left + 'px'; pop.style.top = top + 'px'; }
+function closePops() { document.querySelectorAll('.pop').forEach(p => p.hidden = true); document.querySelectorAll('[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false')); openPop = null; }
+function toggle(pop, anchor, build, align) { if (openPop === pop) { closePops(); return; } closePops(); build(); placePop(pop, anchor, align); anchor.setAttribute('aria-expanded', 'true'); openPop = pop; }
+
+function buildFilterPop() {
+  const opts = NUMERIC_COLS.map(c => `<option value="${c.key}">${c.group}: ${colLabel(c)}</option>`).join('');
+  $('popFilters').innerHTML = `<div class="pop__group">Add a numeric filter</div><form class="pop__form" id="filterForm"><select id="fKey" aria-label="Metric">${opts}</select><select id="fOp" aria-label="Condition"><option value=">=">≥</option><option value="<=">≤</option></select><input id="fVal" type="text" inputmode="decimal" placeholder="value" aria-label="Value"><button class="btn" type="submit">Add</button></form><div class="pop__group" id="fHint">Percent metrics take percent values (2 means 2%), money takes plain USD (50M, 1.2B allowed).</div><div class="pop__sep"></div><div class="pop__group">Quick filters</div>
+  <button class="pop__row" data-quick="vol24|>=|50000000">Vol 24h ≥ $50M</button><button class="pop__row" data-quick="oi|>=|20000000">OI ≥ $20M</button><button class="pop__row" data-quick="fundingAnn|>=|0.3">Funding APR ≥ 30%</button><button class="pop__row" data-quick="fundingAnn|<=|-0.1">Funding APR ≤ −10%</button><button class="pop__row" data-quick="regime|<=|0.7">Vol regime ≤ 0.7 (squeeze)</button><button class="pop__row" data-quick="spread|<=|3">Spread ≤ 3 bps</button><button class="pop__row" data-quick="listed|<=|30">Listed ≤ 30 days</button>
+  <div class="pop__sep"></div><div class="pop__group">Asset class</div>
+  <div class="pop__wrap">${['crypto', 'stock', 'commodity', 'premarket'].map(k => `<button class="pop__row" data-quick="class|is|${k}">${CLASS_LABEL[k]}<span class="hint">${[...S.rows.values()].filter(r => r.cls === k).length}</span></button>`).join('')}</div>
+  <div class="pop__group">Sector</div>
+  <div class="pop__wrap">${sectorCounts().map(([k, n]) => `<button class="pop__row" data-quick="sector|is|${k}">${k}<span class="hint">${n}</span></button>`).join('') || '<span class="pop__group">Sectors load a few minutes after the service starts</span>'}</div>`;
+}
+function parseFilterValue(key, raw) { let s = String(raw).trim().toUpperCase().replace(/[$,\s%]/g, ''); let m = 1; if (/K$/.test(s)) { m = 1e3; s = s.slice(0, -1); } else if (/M$/.test(s)) { m = 1e6; s = s.slice(0, -1); } else if (/B$/.test(s)) { m = 1e9; s = s.slice(0, -1); } const v = parseFloat(s) * m; if (!isFinite(v)) return null; const pctKeys = ['chgP', 'chg1d', 'chg7d', 'chg30d', 'basis', 'oiDP', 'funding', 'fundingAnn', 'fundingNext', 'atr', 'rv24', 'range1d', 'toHigh', 'toLow', 'takerP', 'deltaP', 'vsBtc', 'alpha', 'presence', 'stay', 'imb']; return pctKeys.includes(key) ? v / 100 : v; }
+function buildColsPop() {
+  const groups = GROUP_ORDER.map(g => { const cols = COLS.filter(c => c.group === g && !['symbol', 'actions'].includes(c.key)); if (!cols.length) return ''; return `<div><div class="pop__group">${g}</div>` + cols.map(c => `<button class="pop__row" role="menuitemcheckbox" data-col="${c.key}" aria-checked="${S.visible.has(c.key)}" title="${(c.title || '').replace(/"/g, '&quot;')}"><span class="box">${S.visible.has(c.key) ? '<svg><use href="#i-check"/></svg>' : ''}</span>${colLabel(c)}</button>`).join('') + '</div>'; }).join('');
+  $('popCols').innerHTML = `<div class="pop__cols">${groups}</div><div class="pop__sep"></div><div class="pop__foot"><button class="btn -ghost" data-cols="all">Show all</button><button class="btn -ghost" data-cols="reset">Reset to default</button></div>`;
+}
+function buildRowPop(id) {
+  const on = S.watch.has(id);
+  $('popRow').innerHTML = `<div class="pop__group">${id}</div><button class="pop__row" data-act="link">Show on chart<span class="hint">switches linked widgets</span></button><button class="pop__row" data-act="trade">Trade<span class="hint">opens order form</span></button><button class="pop__row" data-act="star">${on ? 'Remove from watchlist' : 'Add to watchlist'}</button><button class="pop__row" data-act="alert">Set alert<span class="hint">v2</span></button><div class="pop__sep"></div><button class="pop__row" data-act="copy">Copy symbol</button>`;
+  $('popRow').dataset.id = id;
+}
+let toastTimer; function toast(msg) { $('toastText').textContent = msg; $('toast').classList.add('-show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('-show'), 2200); }
+function selectRow(id) { S.selected = id; store.set('selected', id); document.querySelectorAll('#tbody tr').forEach(tr => tr.setAttribute('aria-selected', tr.dataset.id === id)); renderStatus(); toast(`Chart, order book and order form switched to ${id}`); }
+function toggleStar(id) { if (S.watch.has(id)) S.watch.delete(id); else S.watch.add(id); store.set('watch', [...S.watch]); render(); }
+
+/* ========================= Events ========================= */
+document.addEventListener('click', e => {
+  const t = e.target.closest('button, th, tr, .pop'); if (!t) { closePops(); return; }
+  if (t.matches('.pop')) return;
+  if (t.id === 'filtersBtn') return toggle($('popFilters'), t, buildFilterPop);
+  if (t.id === 'colsBtn') return toggle($('popCols'), t, buildColsPop);
+  if (t.id === 'themeBtn') { const root = document.documentElement; const dark = root.dataset.theme === 'dark' || (!root.dataset.theme && matchMedia('(prefers-color-scheme: dark)').matches); root.dataset.theme = dark ? 'light' : 'dark'; store.set('theme', root.dataset.theme); return; }
+  if (t.id === 'reloadBtn') return boot(true);
+  if (t.dataset.src) { S.source = t.dataset.src; store.set('source', S.source); return boot(true); }
+  if (t.id === 'savePresetBtn') { const strip = $('filterStrip'); t.outerHTML = `<form id="savePresetForm" style="display:inline-flex;gap:6px"><input id="presetName" placeholder="Preset name" style="height:24px;padding:0 8px;border-radius:6px;border:1px solid var(--border);background:var(--card-background)" aria-label="Preset name"><button class="btn" type="submit" style="height:24px">Save</button></form>`; $('presetName').focus(); return; }
+  if (t.id === 'deletePresetBtn') { S.customPresets = S.customPresets.filter(p => p.id !== S.preset); store.set('customPresets', S.customPresets); applyPreset('all'); return; }
+  if (t.dataset.preset) return applyPreset(t.dataset.preset);
+  if (t.closest('#period') && t.dataset.p && !t.disabled) { S.period = t.dataset.p; store.set('period', S.period); return render(); }
+  if (t.dataset.rm != null) { S.filters.splice(+t.dataset.rm, 1); return render(); }
+  if (t.dataset.quick) { const [key, op, v] = t.dataset.quick.split('|'); S.filters = S.filters.filter(f => !(f.key === key && f.op === op)); S.filters.push({ key, op, v: op === 'is' ? v : +v }); closePops(); return render(); }
+  if (t.dataset.col) { const k = t.dataset.col; if (S.visible.has(k)) S.visible.delete(k); else S.visible.add(k); store.set('cols', [...S.visible]); buildColsPop(); renderHead(); renderBody(); return; }
+  if (t.dataset.cols) { S.visible = new Set((t.dataset.cols === 'all' ? COLS : COLS.filter(c => c.def)).map(c => c.key)); store.set('cols', [...S.visible]); buildColsPop(); renderHead(); renderBody(); return; }
+  if (t.dataset.star) { e.stopPropagation(); return toggleStar(t.dataset.star); }
+  if (t.dataset.menu) { e.stopPropagation(); return toggle($('popRow'), t, () => buildRowPop(t.dataset.menu)); }
+  if (t.dataset.act) { const id = $('popRow').dataset.id; closePops(); if (t.dataset.act === 'link' || t.dataset.act === 'trade') { selectRow(id); if (t.dataset.act === 'trade') toast(`Order form opened for ${id}`); } else if (t.dataset.act === 'star') toggleStar(id); else if (t.dataset.act === 'copy') { navigator.clipboard?.writeText(id).then(() => toast('Copied ' + id), () => toast(id)); } else toast('Alerts come in v2'); return; }
+  // Header click cycles descending -> ascending -> normal (the preset's own order, no column marked).
+  if (t.matches('th') && t.dataset.key) { const c = COLS.find(x => x.key === t.dataset.key); if (!c || !c.val) return; S.sort = S.sort.key !== c.key ? { key: c.key, dir: 'desc' } : S.sort.dir === 'desc' ? { key: c.key, dir: 'asc' } : S.sort.dir === 'asc' ? { key: null, dir: null } : { key: c.key, dir: 'desc' }; return render(); }
+  if (t.matches('tr') && t.dataset.id) return selectRow(t.dataset.id);
+  if (!t.closest('.pop')) closePops();
+});
+document.addEventListener('submit', e => {
+  e.preventDefault();
+  if (e.target.id === 'filterForm') { const key = $('fKey').value, op = $('fOp').value, v = parseFilterValue(key, $('fVal').value); if (v == null) { $('fVal').focus(); return; } S.filters.push({ key, op, v }); closePops(); render(); }
+  if (e.target.id === 'savePresetForm') { const name = $('presetName').value.trim() || 'My preset'; const id = 'custom-' + Date.now(); S.customPresets.push({ id, label: name, custom: true, filters: S.filters.map(f => ({ ...f })), sort: { ...S.sort }, desc: 'Saved preset' }); store.set('customPresets', S.customPresets); S.preset = id; store.set('preset', id); render(); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePops(); });
+$('search').addEventListener('input', e => { S.search = e.target.value; renderBody(); });
+$('tableWrap').addEventListener('scroll', e => e.target.classList.toggle('-scrolled', e.target.scrollLeft > 0), { passive: true });
+addEventListener('resize', closePops);
+
+/* ========================= Boot ========================= */
+async function boot(force) {
+  closePops(); clearInterval(S.poll); S.poll = null; if (S.es) { S.es.close(); S.es = null; } S.serverCoverage = null;
+  if (S.source === 'demo') return loadDemo();
+  if (S.source === 'server') {
+    try { return await loadServer(); } catch (e) { console.warn('screener service unreachable, falling back to OKX public', e); }
+  }
+  try { await loadLive(); } catch (e) { console.warn('OKX unreachable, falling back to demo', e); loadDemo(); $('dataBadgeText').textContent = 'Demo data, OKX unreachable'; }
+}
+
+(function init() {
+  const th = store.get('theme', null); if (th) document.documentElement.dataset.theme = th;
+  const p = allPresets().find(x => x.id === S.preset) || PRESETS[0]; S.filters = p.filters.map(f => ({ ...f })); S.sort = { ...p.sort };
+  render(); boot();
+})();
+</script>

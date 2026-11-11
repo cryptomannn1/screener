@@ -5,7 +5,7 @@
 `screener/widget/` is a self-contained Vue 3 widget (plain JS, `<script setup>`,
 no runtime dependency besides Vue) that renders the market screener fed by the
 Go service in this repository (`GET /screener`, contract: `../api/screener.md`).
-It was built from the approved HTML prototype (session 016, `screener-v1.html`)
+It was built from the first HTML prototype (`../prototype/src/screener-v1.html`)
 and follows terminal-front's table conventions and design tokens, so that it can
 be dropped into `terminal-front` as a widget type.
 

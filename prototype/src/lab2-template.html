@@ -1,0 +1,615 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Screener Controls Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap">
+<style>
+/* Terminal kit: tokens and components copied from screener-v1.html */
+__KIT_CSS__
+
+/* ===== Lab additions: a clean default table and three ways to manage its columns ===== */
+.lab__note { flex: none; min-height: 16px; max-width: 132ch; color: var(--text-mid-emphasis); }
+.lab .btn.-ghost[aria-pressed="true"] { background: var(--card-neutral-background); color: var(--text-high-emphasis); }
+.lab__lbl { color: var(--text-low-emphasis); }
+
+.bar { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: none; min-height: 40px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.bar.-sub { background: var(--widget-header-background); }
+.bar__grow { flex: 1 1 0; min-width: 8px; }
+.scr__tabs.-views { flex: none; }
+.btn.-primary { border-color: transparent !important; background: var(--primary-accent); color: var(--text-light); }
+.btn.-primary:hover { background: var(--primary-deep); }
+.btn.-add { height: 24px; padding: 0 8px 0 6px; border-style: dashed; background: transparent; color: var(--text-mid-emphasis); font-weight: 400; }
+.btn.-add:hover { color: var(--text-high-emphasis); }
+.btn.-add svg { width: 12px; height: 12px; }
+.seg button i, .opt i { margin-left: 4px; font-style: normal; font-weight: 400; color: var(--text-low-emphasis); }
+
+/* Header: reorder by dragging (as the terminal's Positions table), a menu caret on hover, a remove cross in customize mode */
+.trading-table.-reorder th[data-k]:not([data-k="symbol"]) { cursor: grab; touch-action: none; }
+.trading-table th[data-dragging] { color: var(--primary-accent); cursor: grabbing; }
+.trading-table th[data-drop-edge="before"] { box-shadow: inset 2px 0 var(--primary-accent); }
+.trading-table th[data-drop-edge="after"] { box-shadow: inset -2px 0 var(--primary-accent); }
+body.-dragging, body.-dragging * { cursor: grabbing !important; user-select: none; }
+.trading-table th:hover, .trading-table th:has(.hm[aria-expanded="true"]) { z-index: 12; }
+.trading-table th.-flt .lbl { color: var(--primary-accent); }
+.hm, .hx { position: absolute; z-index: 1; top: 50%; right: -9px; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 20px; margin-top: -10px; padding: 0; border: 0; border-radius: 4px; background: var(--widget-header-background); color: var(--icons-mid-emphasis); opacity: 0; }
+.hm svg, .hx svg { width: 12px; height: 12px; }
+.trading-table th:hover .hm, .hm[aria-expanded="true"] { opacity: 1; }
+.hm:hover, .hm[aria-expanded="true"] { background: var(--card-neutral-background); color: var(--text-high-emphasis); }
+.trading-table th:not(.-end) .hm { position: static; margin: 0 0 0 18px; vertical-align: middle; }
+.trading-table.-editing thead th[data-k] { padding-right: 26px; background: var(--card-neutral-background); }
+.trading-table.-editing .hx { right: 4px; opacity: 1; background: transparent; }
+.hx:hover { color: var(--text-error-accent); }
+.trading-table th .grip { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; color: var(--icons-low-emphasis); }
+/* a text column after a numeric one keeps its label clear of the neighbour's menu button */
+.trading-table th[data-k]:not(.-end):not([data-pin]), .trading-table td:not(.-end):not([data-pin]):not(.-tail) { padding-left: 24px; }
+.trading-table th.-tail, .trading-table td.-tail { width: 36px; min-width: 36px; padding: 0 4px; cursor: default; }
+.addcol { width: 24px; height: 24px; }
+.level { display: inline-flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+
+/* Column catalogue: metric families with a plain description; periods are chips */
+.cat { width: 380px; max-width: calc(100vw - 32px); }
+.cat__search { display: block; padding: 4px 4px 0; }
+.cat__search input { width: 100%; max-width: none; background: var(--dropdown-hover); border-color: transparent !important; color: var(--terminal-v2-text); }
+.cat__search svg { left: 12px; top: 11px; }
+.cat__list { max-height: min(60vh, 520px); overflow: auto; overscroll-behavior: contain; }
+.cat__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 6px 8px; border-radius: 6px; }
+.cat__item:hover { background: var(--dropdown-hover); }
+.cat__text b { display: block; font-weight: 500; color: var(--terminal-v2-text); }
+.cat__text span { color: var(--terminal-v2-muted); }
+.cat__keys { display: flex; gap: 2px; flex-wrap: wrap; justify-content: flex-end; max-width: 190px; }
+.ck, .opt { height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--dropdown-hover); color: var(--terminal-v2-muted); white-space: nowrap; }
+.cat__item:hover .ck { background: color-mix(in srgb, var(--terminal-v2-text) 9%, var(--dropdown-background)); }
+.ck:hover, .opt:hover { color: var(--terminal-v2-text); }
+.ck[aria-pressed="true"], .opt[aria-pressed="true"] { background: var(--card-primary-background-light) !important; color: var(--terminal-v2-text); font-weight: 500; }
+.pop__row .tick { margin-left: auto; width: 12px; height: 12px; color: var(--primary-accent); }
+.pop__row .tick + .hint { margin-left: 0; }
+.pop__foot.-split { justify-content: space-between; align-items: center; }
+.pop__foot .lbl { color: var(--terminal-v2-muted); }
+.pop .seg { background: var(--dropdown-hover); }
+.pop .seg button[aria-pressed="true"] { background: var(--dropdown-background); color: var(--terminal-v2-text); }
+
+/* Filters popover: one compact row of buttons per column that is in the table */
+.fr { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; align-items: center; padding: 8px; max-width: 520px; }
+.fr__l { color: var(--terminal-v2-text); font-weight: 500; white-space: nowrap; }
+.qopts { display: flex; flex-wrap: wrap; gap: 4px; }
+.fin { height: 24px; padding: 0 4px; border: 1px solid transparent; border-radius: 6px; background: var(--dropdown-hover); color: var(--terminal-v2-text); }
+.fin.-on { border-color: var(--primary-accent); }
+
+/* B: columns drawer, the screener's take on the Positions column settings */
+.drawer { position: absolute; z-index: 40; top: 0; right: 0; bottom: 0; display: flex; flex-direction: column; width: 340px; max-width: 100%; background: var(--dropdown-background); color: var(--terminal-v2-text); box-shadow: var(--dropdown-shadow); }
+.drawer[hidden] { display: none; }
+.drawer__head { display: flex; align-items: center; gap: 8px; flex: none; padding: 8px 8px 4px 12px; }
+.drawer__head b { font-weight: 500; }
+.drawer__head .mid { color: var(--terminal-v2-muted); }
+.drawer__body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 4px; }
+.drawer__foot { display: flex; justify-content: flex-end; flex: none; padding: 8px; }
+.drawer .cat { width: auto; max-width: none; }
+.drawer .cat__list { max-height: none; overflow: visible; }
+.dl__row { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 8px; border-radius: 4px; cursor: grab; user-select: none; touch-action: none; }
+.dl__row[data-locked] { cursor: default; color: var(--terminal-v2-muted); }
+.dl__row:hover { background: var(--dropdown-hover); }
+.dl__row[data-dragging] { background: var(--dropdown-hover); color: var(--primary-accent); }
+.dl__row[data-drop-edge="before"] { box-shadow: inset 0 2px var(--primary-accent); }
+.dl__row[data-drop-edge="after"] { box-shadow: inset 0 -2px var(--primary-accent); }
+.dl__grip { width: 12px; height: 12px; color: var(--icons-low-emphasis); }
+.dl__x { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--icons-mid-emphasis); opacity: 0; }
+.dl__row:hover .dl__x, .dl__x:focus-visible { opacity: 1; }
+.dl__x:hover { color: var(--text-error-accent); }
+.dl__x svg { width: 12px; height: 12px; }
+@media (max-width: 720px) { .cat__keys { max-width: 150px; } }
+</style>
+
+__ICONS__
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-near" viewBox="0 0 16 16"><path d="M2.5 8h11M5.5 3.5 8 6l2.5-2.5M5.5 12.5 8 10l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="app">
+  <div class="lab">
+    <span class="lab__title">Screener controls lab</span>
+    <div class="seg" id="variantSeg" role="group" aria-label="How columns are managed"></div>
+    <span class="lab__lbl">Filters</span>
+    <div class="seg" id="filterSeg" role="group" aria-label="Where filters live"></div>
+    <button class="btn -ghost" id="presetsBtn" data-a="lpresets" aria-pressed="false" title="Preview of the future quick presets as tabs: each one is a set of columns, an order and a filter">Presets preview</button>
+    <span class="lab__spacer"></span>
+    <span class="lab__badge -loading" id="srcBadge"><i></i><span id="srcText">Loading</span></span>
+    <button class="btn -ghost -icon" data-a="theme" title="Toggle theme"><svg><use href="#i-theme"/></svg></button>
+  </div>
+  <div class="lab__note" id="note"></div>
+
+  <section class="widget-frame" aria-label="Screener widget">
+    <div class="widget-frame__header">
+      <span class="widget-frame__grip"><svg><use href="#i-grip"/></svg></span>
+      <span class="widget-frame__title">Screener</span>
+      <button class="header-symbol" title="Linked instrument group: chart, order book, order form follow this row"><i></i><span id="headerSymbolText">BTC</span><small id="headerSymbolRest">USDT SWAP</small></button>
+      <div class="widget-frame__actions">
+        <button class="btn -ghost -icon" title="Widget settings"><svg><use href="#i-gear"/></svg></button>
+        <button class="btn -ghost -icon" title="Maximize"><svg><use href="#i-max"/></svg></button>
+      </div>
+    </div>
+
+    <div id="top"></div>
+
+    <div class="scr__body">
+      <div class="trading-table" id="wrap" tabindex="0" role="region" aria-label="Screener table">
+        <table><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+      </div>
+      <aside class="drawer" id="drawer" aria-label="Columns" hidden></aside>
+    </div>
+
+    <div class="scr__status">
+      <span>Instruments <b id="stTotal">0</b></span>
+      <span>Shown <b id="stShown">0</b></span>
+      <span>Updated <b id="stUpdated">never</b></span>
+      <span class="spacer"></span>
+      <span>Order <b id="stOrder">volume</b></span>
+    </div>
+  </section>
+</div>
+
+<div class="pop" id="pop" hidden></div>
+
+<script id="snap" type="application/json">__SNAPSHOT__</script>
+<script>
+'use strict';
+/* ========================= Helpers ========================= */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ok = v => v != null && isFinite(v);
+const clone = o => JSON.parse(JSON.stringify(o));
+const NA = '<span class="na">—</span>';
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('scrlab2.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('scrlab2.' + k, JSON.stringify(v)); } catch {} },
+};
+
+const LEVELS = [['do', 'DO'], ['wo', 'WO'], ['mo', 'MO'], ['ma50', 'MA50'], ['ma100', 'MA100'], ['ma200', 'MA200']];
+const LLABEL = Object.fromEntries(LEVELS);
+const LTITLE = { do: "Today's open (UTC): its price and the distance to it", wo: 'Open of the week (Monday UTC): its price and the distance to it', mo: 'Open of the month (UTC): its price and the distance to it', ma50: 'MA 50 of daily closes: its price and the distance to it', ma100: 'MA 100 of daily closes: its price and the distance to it', ma200: 'MA 200 of daily closes: its price and the distance to it' };
+const CROSS_H = 4;   // "crossed" means the hourly closes flipped sides within the last 4 hours
+const LMODES = [['above', 'Above'], ['near', 'Near'], ['below', 'Below'], ['up', `Crossed ↑ ${CROSS_H}h`], ['down', `Crossed ↓ ${CROSS_H}h`]];
+const mLabel = m => LMODES.find(x => x[0] === m)[1];
+const CLASSES = [['all', 'All'], ['crypto', 'Crypto'], ['stock', 'Stocks'], ['commodity', 'Commodities']];
+const CLABEL = { crypto: 'Crypto', stock: 'Stock', premarket: 'Pre-market', commodity: 'Commodity', other: 'Other' };
+const NEARS = [['0.25', '0.25%'], ['0.5', '0.5%'], ['1', '1%'], ['atr', '½ ATR']];
+const VARIANTS = [['A', 'A Plus in header'], ['B', 'B Column panel'], ['C', 'C Customize mode']];
+const FMODES = [['menu', 'In column menu'], ['button', 'One button']];
+const NOTES = {
+  A: 'Таблица по умолчанию из семи колонок. Добавить: плюс в конце шапки открывает каталог метрик с описаниями. Убрать, отсортировать, отфильтровать: три точки у заголовка при наведении. Порядок: тянуть заголовок, как в Positions.',
+  B: 'Та же чистая таблица. Кнопка Columns открывает панель справа, как настройки колонок в Positions: сверху то, что уже в таблице, с перетаскиванием и удалением, ниже каталог для добавления. Заголовки тоже можно тянуть.',
+  C: 'В обычном режиме шапка заблокирована: случайно ничего не сдвинуть и не удалить. Кнопка Customize включает режим настройки: у заголовков появляются ручка и крестик, под панелью лента колонок для добавления одним кликом.',
+};
+const DEFAULT_COLS = ['symbol', 'spark', 'mark', 'chg24', 'vol24', 'oi', 'funding'];
+
+function fmtPrice(v) { if (!ok(v)) return NA; const d = v >= 1000 ? 1 : v >= 100 ? 2 : v >= 1 ? 3 : v >= 0.01 ? 5 : 7; return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function fmtPct(v, d = 2, signed = true) { if (!ok(v)) return NA; const x = v * 100; const s = (signed && x > 0 ? '+' : '') + x.toFixed(d) + '%'; const cls = !signed ? '' : x > 0.0005 ? 'pos' : x < -0.0005 ? 'neg' : 'mid'; return `<span class="${cls}">${s}</span>`; }
+function usdText(v) { const a = Math.abs(v); return '$' + (a >= 1e12 ? (v / 1e12).toFixed(2) + 'T' : a >= 1e9 ? (v / 1e9).toFixed(a >= 1e11 ? 0 : 2) + 'B' : a >= 1e6 ? (v / 1e6).toFixed(a >= 1e8 ? 0 : 1) + 'M' : a >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v.toFixed(0)); }
+const fmtUsd = v => ok(v) ? usdText(v) : NA;
+const fmtX = v => ok(v) ? `<span class="${v >= 2 ? 'pos' : v < 0.6 ? 'dim' : ''}">${v.toFixed(v >= 10 ? 0 : 2)}×</span>` : NA;
+// Sparkline of the prototype: baseline at the price 24 hours ago, green above it and red below.
+function sparkline(vals, base) {
+  if (!vals || vals.length < 2) return NA;
+  if (!(base > 0)) base = vals[0];
+  const w = 72, h = 22, min = Math.min(...vals, base), max = Math.max(...vals, base), span = max - min || 1;
+  const y = v => h - 2 - ((v - min) / span) * (h - 4);
+  const pts = vals.map((v, i) => [(i / (vals.length - 1)) * (w - 2) + 1, y(v)]);
+  const by = y(base).toFixed(1), x0 = pts[0][0].toFixed(1), x1 = pts[pts.length - 1][0].toFixed(1);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  const area = d + ` L${x1} ${by} L${x0} ${by} Z`;
+  const id = 'sp' + Math.random().toString(36).slice(2, 8);
+  const col = vals[vals.length - 1] >= base ? 'var(--long)' : 'var(--short)';
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><defs><clipPath id="${id}a"><rect x="0" y="0" width="${w}" height="${by}"/></clipPath><clipPath id="${id}b"><rect x="0" y="${by}" width="${w}" height="${h}"/></clipPath></defs>`
+    + `<line x1="${x0}" x2="${x1}" y1="${by}" y2="${by}" stroke="var(--border-secondary, var(--border))" stroke-width="1"/>`
+    + `<path d="${area}" fill="var(--long)" opacity=".16" clip-path="url(#${id}a)"/><path d="${area}" fill="var(--short)" opacity=".16" clip-path="url(#${id}b)"/>`
+    + `<path d="${d}" fill="none" stroke="var(--long)" stroke-width="1.2" clip-path="url(#${id}a)"/><path d="${d}" fill="none" stroke="var(--short)" stroke-width="1.2" clip-path="url(#${id}b)"/>`
+    + `<circle cx="${x1}" cy="${pts[pts.length - 1][1].toFixed(1)}" r="1.6" fill="${col}"/></svg>`;
+}
+
+/* ========================= State ========================= */
+const LAB = { variant: store.get('variant', 'A'), filter: store.get('filter', 'menu'), presets: store.get('presets', false) };
+const F = {
+  view: 'my', cls: 'all', sector: '', search: '',
+  cols: store.get('cols', DEFAULT_COLS).filter(Boolean),
+  levels: {},            // level column -> above | near | below | up | down
+  near: '0.5',           // range of "near": percent of price, or half of the hourly ATR
+  nums: {},              // numeric quick filters by column key: { op, v }
+  sort: { key: null, dir: null },   // dir: desc | asc | near
+  drawer: false, edit: false,
+  selected: 'BTC-USDT-SWAP',
+};
+const S = { rows: [], ts: 0, live: false };
+const POP = { name: null, k: null };
+const CAT = { q: '' };
+const VIEWS = {};
+
+/* ========================= Data ========================= */
+function norm(r) {
+  return { id: r.instId, base: r.symbol, quote: r.settle || 'USDT', cls: r.class || 'crypto', sector: r.sector || '', name: r.name || '',
+    mark: r.mark, last: r.last, chg: r.chg || {}, chg7d: r.chg7d, chg30d: r.chg30d, vol24: r.vol24, volx7: r.volx7, volx: r.volx || {}, oi: r.oi, oiD: r.oiD || {},
+    funding: r.funding, fundingAnn: r.fundingAnn, mcap: r.mcap, mcapRank: r.mcapRank, oiMcap: r.oiMcap, atr: r.atr, regime: r.regime,
+    takerBuy: r.takerBuy || {}, delta: r.delta || {}, tape: r.tape, vsBtc: r.vsBtc || {}, beta: r.beta, corr: r.corr, spread: r.spread, depth05: r.depth05,
+    lv: { do: r.do, wo: r.wo, mo: r.mo, ma50: r.ma50, ma100: r.ma100, ma200: r.ma200 }, spark: r.spark || null, x: {} };
+}
+async function load() {
+  try {
+    const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 2500);
+    const res = await fetch('/screener', { signal: ctl.signal, cache: 'no-store' }); clearTimeout(timer);
+    if (!res.ok) throw new Error('http ' + res.status);
+    const d = await res.json(); if (!d.rows || !d.rows.length) throw new Error('empty');
+    S.rows = d.rows.map(norm); S.ts = d.ts; S.live = true;
+  } catch (e) {
+    if (!S.rows.length) { const d = JSON.parse($('snap').textContent); S.rows = d.rows.map(norm); S.ts = d.ts; }
+    S.live = false;
+  }
+  const b = $('srcBadge'); b.className = 'lab__badge' + (S.live ? '' : ' -demo'); $('srcText').textContent = S.live ? 'Live' : 'Snapshot';
+  b.title = S.live ? 'Rows come from the screener service on this host' : 'The service is not reachable from this page: a saved snapshot of 170 instruments is shown';
+}
+
+/* ========================= Levels and filters ========================= */
+// Hourly bars since the level came into being, the forming one included: a close before that says nothing about the level.
+function barsSinceStart(k) {
+  const d = new Date(S.ts || Date.now()), h = d.getUTCHours() + 1;
+  return k === 'do' ? h : k === 'wo' ? ((d.getUTCDay() + 6) % 7) * 24 + h : k === 'mo' ? (d.getUTCDate() - 1) * 24 + h : Infinity;
+}
+// The most recent hour in which an hourly close sat on the other side of the level: { dir, ago } or null.
+function cross(r, k) {
+  if (k in r.x) return r.x[k];
+  let out = null; const l = r.lv[k], s = r.spark;
+  if (l && l.px > 0 && s && s.length > 2) {
+    const n = s.length; const ref = ok(r.last) && r.last > 0 ? r.last : s[n - 1]; const side = ref >= l.px ? 1 : -1;
+    for (let i = n - 2; i >= Math.max(0, n - barsSinceStart(k)); i--) { const v = s[i]; if (!ok(v)) continue; if ((v >= l.px ? 1 : -1) !== side) { out = { dir: side > 0 ? 'up' : 'down', ago: n - 1 - i }; break; } }
+  }
+  return (r.x[k] = out);
+}
+function nearLimit(r) { return F.near === 'atr' ? (ok(r.atr) && r.atr > 0 ? r.atr * 0.5 : 0.005) : parseFloat(F.near) / 100; }
+function levelPass(r, k, m) {
+  const l = r.lv[k]; if (!l || !ok(l.dist)) return false;
+  if (m === 'above') return l.dist > 0; if (m === 'below') return l.dist < 0; if (m === 'near') return Math.abs(l.dist) <= nearLimit(r);
+  const c = cross(r, k); return !!c && c.dir === m && c.ago <= CROSS_H;
+}
+function passes(r, skipLevel) {
+  if (F.cls !== 'all' && (F.cls === 'stock' ? !(r.cls === 'stock' || r.cls === 'premarket') : r.cls !== F.cls)) return false;
+  if (F.sector && r.sector !== F.sector) return false;
+  if (F.search) { const terms = F.search.toUpperCase().replace(/[^A-Z0-9,]/g, '').split(',').filter(Boolean); if (terms.length && !terms.some(t => r.base.includes(t))) return false; }
+  for (const k in F.nums) { const f = F.nums[k], v = COL[k].val(r); if (!ok(v)) return false; if (f.op === '>=' ? v < f.v : v > f.v) return false; }
+  for (const k in F.levels) { if (k !== skipLevel && !levelPass(r, k, F.levels[k])) return false; }
+  return true;
+}
+// How many instruments would match this level condition with every other filter kept.
+function countLevel(k, m) { let n = 0; for (const r of S.rows) if (passes(r, k) && levelPass(r, k, m)) n++; return n; }
+function sectorCounts() { const m = new Map(); for (const r of S.rows) if (r.sector) m.set(r.sector, (m.get(r.sector) || 0) + 1); return [...m].sort((a, b) => b[1] - a[1]); }
+const isNum = (k, op, v) => !!(F.nums[k] && F.nums[k].op === op && F.nums[k].v === v);
+function toggleLevel(k, m) { if (F.levels[k] === m) delete F.levels[k]; else F.levels[k] = m; }
+function toggleNum(k, op, v) { if (isNum(k, op, v)) delete F.nums[k]; else F.nums[k] = { op, v }; }
+function thr(k, v) { const u = COL[k].unit; return u === 'usd' ? usdText(v).replace(/\.0+(?=[KMBT])/, '') : u === 'pct' ? String(+(v * 100).toFixed(2)).replace('-', '−') + '%' : u === 'x' ? v + '×' : u === 'bps' ? v + ' bps' : String(v); }
+const opSign = op => op === '>=' ? '≥' : '≤';
+function activeCount() { return (F.sector ? 1 : 0) + Object.keys(F.levels).length + Object.keys(F.nums).length; }
+
+/* ========================= Columns ========================= */
+const colLabel = c => typeof c.label === 'function' ? c.label() : c.label;
+const per = (obj, p) => r => r[obj] ? r[obj][p] : null;
+const MOVE3 = [['>=', 0.03], ['<=', -0.03]], MOVE10 = [['>=', 0.1], ['<=', -0.1]];
+const pctCol = (label, get, o = {}) => ({ label, end: true, unit: 'pct', val: get, fmt: r => fmtPct(get(r), o.d == null ? 2 : o.d, o.signed !== false), q: o.q, title: o.title });
+const usdCol = (label, get, q, title) => ({ label, end: true, unit: 'usd', val: get, fmt: r => fmtUsd(get(r)), q, title });
+const xCol = (label, get, q, title) => ({ label, end: true, unit: 'x', val: get, fmt: r => fmtX(get(r)), q, title });
+function fmtLevel(r, k) { const l = r.lv[k]; return l && ok(l.dist) ? `<span class="level"><span class="level__px">${fmtPrice(l.px)}</span>${fmtPct(l.dist)}</span>` : NA; }
+const COL = {
+  symbol: { label: 'Symbol', pin: true, text: true, val: r => r.base },
+  spark: { label: '24h', title: 'Hourly closes of the last day against the price a day ago' },
+  sector: { label: 'Sector', text: true, title: 'Crypto sector, or the asset class for stocks, indices and commodities', val: r => r.sector || (r.cls !== 'crypto' ? CLABEL[r.cls] || r.cls : null), fmt: r => { const v = COL.sector.val(r); return v ? `<span class="${r.sector ? '' : 'mid'}" title="${esc(r.name)}">${esc(v)}</span>` : NA; } },
+  mark: { label: 'Mark', end: true, title: 'Mark price in USD', val: r => r.mark, fmt: r => ok(r.mark) ? '$' + fmtPrice(r.mark) : NA },
+  chg1h: pctCol('Chg 1h', per('chg', '1h'), { q: MOVE3 }), chg4h: pctCol('Chg 4h', per('chg', '4h'), { q: MOVE3 }), chg24: pctCol('Chg 24h', per('chg', '24h'), { q: MOVE3 }),
+  chg7d: pctCol('Chg 7D', r => r.chg7d, { q: MOVE10 }), chg30d: pctCol('Chg 30D', r => r.chg30d, { q: MOVE10 }),
+  vol24: usdCol('Vol 24h', r => r.vol24, [['>=', 20e6], ['>=', 100e6]], 'Traded volume over 24 hours in USD'),
+  volx1h: xCol('Vol × 1h', per('volx', '1h'), [['>=', 2], ['>=', 5]]), volx4h: xCol('Vol × 4h', per('volx', '4h'), [['>=', 2], ['>=', 5]]), volx7: xCol('Vol × 7D', r => r.volx7, [['>=', 2], ['>=', 5]], 'Volume of the day against its 7-day average'),
+  oi: usdCol('OI', r => r.oi, [['>=', 10e6], ['>=', 50e6]], 'Open interest in USD'),
+  oiD1h: pctCol('OI Δ 1h', per('oiD', '1h'), { q: MOVE3 }), oiD4h: pctCol('OI Δ 4h', per('oiD', '4h'), { q: MOVE3 }), oiD24h: pctCol('OI Δ 24h', per('oiD', '24h'), { q: MOVE3 }),
+  oiMcap: pctCol('OI/Mcap', r => r.oiMcap, { d: 1, signed: false }),
+  funding: { label: 'Funding', end: true, unit: 'pct', title: 'Current funding rate', q: [['>=', 0.0003], ['<=', -0.0003]], val: r => r.funding, fmt: r => ok(r.funding) ? `<span class="${r.funding > 0 ? 'pos' : r.funding < 0 ? 'neg' : 'mid'}">${r.funding > 0 ? '+' : ''}${(r.funding * 100).toFixed(4)}%</span>` : NA },
+  fundingAnn: pctCol('Funding APR', r => r.fundingAnn, { d: 1, q: [['>=', 0.3], ['<=', -0.1]] }),
+  mcap: usdCol('Mcap', r => r.mcap, [['>=', 1e9], ['<=', 3e8]], 'Market capitalisation in USD, crypto only'),
+  mcapRank: { label: 'Rank', end: true, val: r => r.mcapRank, fmt: r => ok(r.mcapRank) ? '#' + r.mcapRank : NA },
+  atr: pctCol('ATR %', r => r.atr, { signed: false }),
+  regime: xCol('Vol regime', r => r.regime, [['<=', 0.7], ['>=', 1.6]], "Today's range against its 20-day norm"),
+  taker1h: pctCol('Taker buy 1h', per('takerBuy', '1h'), { d: 0, signed: false, q: [['>=', 0.6], ['<=', 0.4]] }), taker4h: pctCol('Taker buy 4h', per('takerBuy', '4h'), { d: 0, signed: false, q: [['>=', 0.6], ['<=', 0.4]] }), taker24h: pctCol('Taker buy 24h', per('takerBuy', '24h'), { d: 0, signed: false, q: [['>=', 0.6], ['<=', 0.4]] }),
+  delta1h: pctCol('Delta 1h', per('delta', '1h'), { d: 1, q: [['>=', 0.1], ['<=', -0.1]] }), delta4h: pctCol('Delta 4h', per('delta', '4h'), { d: 1, q: [['>=', 0.1], ['<=', -0.1]] }), delta24h: pctCol('Delta 24h', per('delta', '24h'), { d: 1, q: [['>=', 0.1], ['<=', -0.1]] }),
+  tape: { label: 'Tape /min', end: true, val: r => r.tape, fmt: r => ok(r.tape) ? r.tape.toFixed(0) : NA },
+  vs1h: pctCol('vs BTC 1h', per('vsBtc', '1h'), { q: [['>=', 0.02], ['<=', -0.02]] }), vs4h: pctCol('vs BTC 4h', per('vsBtc', '4h'), { q: [['>=', 0.02], ['<=', -0.02]] }), vs24h: pctCol('vs BTC 24h', per('vsBtc', '24h'), { q: [['>=', 0.02], ['<=', -0.02]], title: "Price change over 24 hours minus BTC's" }),
+  beta: { label: 'Beta', end: true, val: r => r.beta, fmt: r => ok(r.beta) ? r.beta.toFixed(2) : NA },
+  corr: { label: 'Corr', end: true, val: r => r.corr, fmt: r => ok(r.corr) ? r.corr.toFixed(2) : NA },
+  spread: { label: 'Spread', end: true, unit: 'bps', q: [['<=', 3]], val: r => r.spread, fmt: r => ok(r.spread) ? r.spread.toFixed(1) + ' bps' : NA },
+  depth05: usdCol('Depth ±0.5%', r => r.depth05, [['>=', 1e6]]),
+};
+LEVELS.forEach(([k, l]) => { COL[k] = { label: l, end: true, level: true, title: LTITLE[k], val: r => r.lv[k] ? r.lv[k].dist : null, fmt: r => fmtLevel(r, k) }; });
+F.cols = F.cols.filter(k => COL[k]); if (!F.cols.includes('symbol')) F.cols.unshift('symbol');
+
+// The catalogue a newcomer reads: what the metric is in one line; periods are chips of one family.
+const P3 = s => [[s + '1h', '1h'], [s + '4h', '4h'], [s + '24h', '24h']];
+const CATALOG = [
+  { g: 'Price', items: [
+    { name: 'Mark price', desc: 'Current price in USD', keys: [['mark', '']] },
+    { name: 'Change', desc: 'Price change over the period', keys: [['chg1h', '1h'], ['chg4h', '4h'], ['chg24', '24h'], ['chg7d', '7D'], ['chg30d', '30D']] },
+    { name: '24h chart', desc: 'Path of the last day against the price a day ago', keys: [['spark', '']] },
+  ] },
+  { g: 'Volume', items: [
+    { name: 'Volume 24h', desc: 'Traded over the last day, in USD', keys: [['vol24', '']] },
+    { name: 'Volume vs usual', desc: 'Against its 7-day norm: 2× is twice the usual', keys: [['volx1h', '1h'], ['volx4h', '4h'], ['volx7', '24h']] },
+  ] },
+  { g: 'Open interest', items: [
+    { name: 'Open interest', desc: 'Value of all open positions, in USD', keys: [['oi', '']] },
+    { name: 'OI change', desc: 'Positions opened or closed over the period', keys: P3('oiD') },
+    { name: 'OI to market cap', desc: 'How much leverage sits on the coin', keys: [['oiMcap', '']] },
+  ] },
+  { g: 'Funding', items: [
+    { name: 'Funding rate', desc: 'What longs pay shorts per interval', keys: [['funding', '']] },
+    { name: 'Funding APR', desc: 'The same rate as a yearly percentage', keys: [['fundingAnn', '']] },
+  ] },
+  { g: 'Asset', items: [
+    { name: 'Sector', desc: 'Crypto sector, or the class for stocks and commodities', keys: [['sector', '']] },
+    { name: 'Market cap', desc: 'Capitalisation in USD and its rank, crypto only', keys: [['mcap', 'Value'], ['mcapRank', 'Rank']] },
+  ] },
+  { g: 'Levels', items: [
+    { name: 'Opens', desc: 'Open of the day, week, month and the distance to it', keys: [['do', 'Day'], ['wo', 'Week'], ['mo', 'Month']] },
+    { name: 'Daily moving averages', desc: 'The average and the distance to it', keys: [['ma50', '50'], ['ma100', '100'], ['ma200', '200']] },
+  ] },
+  { g: 'Volatility', items: [
+    { name: 'ATR', desc: 'Typical hourly move as a share of price', keys: [['atr', '']] },
+    { name: 'Volatility regime', desc: "Today's range against its norm: below 0.7 is a squeeze", keys: [['regime', '']] },
+  ] },
+  { g: 'Flow', items: [
+    { name: 'Taker buy share', desc: 'Share of volume bought at market', keys: P3('taker') },
+    { name: 'Delta', desc: 'Market buying minus market selling', keys: P3('delta') },
+    { name: 'Tape speed', desc: 'Market orders per minute', keys: [['tape', '']] },
+  ] },
+  { g: 'Against BTC', items: [
+    { name: 'Ahead or behind BTC', desc: "Price change minus BTC's over the period", keys: P3('vs') },
+    { name: 'Beta and correlation', desc: 'How strongly it follows BTC', keys: [['beta', 'Beta'], ['corr', 'Corr']] },
+  ] },
+  { g: 'Order book', items: [
+    { name: 'Spread', desc: 'Gap between best bid and ask, in basis points', keys: [['spread', '']] },
+    { name: 'Depth', desc: 'Resting orders within ±0.5% of price', keys: [['depth05', '']] },
+  ] },
+];
+const SUGGEST = ['sector', 'mcap', 'chg1h', 'chg7d', 'volx7', 'oiD24h', 'fundingAnn', 'wo', 'ma200', 'vs24h', 'atr'];
+
+// Future quick presets, shown as tabs when the preview is on: columns + order + filter in one click.
+const PRESETS = {
+  anomalies: { label: 'Anomalies', title: 'Unusual activity: volume far above its 7-day norm', cls: 'all', sector: '', cols: ['symbol', 'spark', 'mark', 'chg1h', 'chg24', 'volx7', 'vol24', 'oiD24h', 'funding'], sort: { key: 'volx7', dir: 'desc' }, nums: { vol24: { op: '>=', v: 5e6 } }, levels: {} },
+  laggards: { label: 'Laggards', title: 'Liquid coins that trail BTC over the day', cls: 'crypto', sector: '', cols: ['symbol', 'spark', 'mark', 'chg24', 'vs24h', 'chg7d', 'sector', 'vol24'], sort: { key: 'vs24h', dir: 'asc' }, nums: { vol24: { op: '>=', v: 20e6 } }, levels: {} },
+};
+const viewState = () => clone({ cls: F.cls, sector: F.sector, cols: F.cols, sort: F.sort, nums: F.nums, levels: F.levels });
+function switchView(v) {
+  if (v === F.view) return; VIEWS[F.view] = viewState();
+  const next = VIEWS[v] || (PRESETS[v] ? clone(PRESETS[v]) : { cls: 'all', sector: '', cols: store.get('cols', DEFAULT_COLS), sort: { key: null, dir: null }, nums: {}, levels: {} });
+  Object.assign(F, { view: v, cls: next.cls, sector: next.sector, cols: next.cols.slice(), sort: { ...next.sort }, nums: clone(next.nums), levels: clone(next.levels) });
+}
+function saveCols() { if (F.view === 'my') store.set('cols', F.cols); }
+function addCol(k) { if (!COL[k] || F.cols.includes(k)) return; F.cols.push(k); saveCols(); requestAnimationFrame(() => { $('wrap').scrollLeft = $('wrap').scrollWidth; }); }
+// A hidden column takes its filter and its order with it: nothing may filter the table from out of sight.
+function hideCol(k) { if (k === 'symbol') return; F.cols = F.cols.filter(x => x !== k); delete F.nums[k]; delete F.levels[k]; if (k === 'sector') F.sector = ''; if (F.sort.key === k) F.sort = { key: null, dir: null }; saveCols(); }
+function moveCol(k, target, edge) { if (k === 'symbol' || target === 'symbol' || k === target) return; const list = F.cols.filter(x => x !== k); const i = list.indexOf(target); if (i < 0) return; list.splice(edge === 'before' ? i : i + 1, 0, k); F.cols = list; saveCols(); }
+function nudgeCol(k, d) { const i = F.cols.indexOf(k), j = i + d; if (i < 1 || j < 1 || j >= F.cols.length) return; const list = F.cols.slice(); [list[i], list[j]] = [list[j], list[i]]; F.cols = list; saveCols(); }
+
+/* ========================= Order ========================= */
+// Without a chosen column the order follows the question asked: nearest to the level, latest cross, else volume.
+function implicitOrder() {
+  const ks = Object.keys(F.levels);
+  const nearK = ks.find(k => F.levels[k] === 'near'); if (nearK) return { kind: 'near', k: nearK, text: `nearest to ${LLABEL[nearK]} first` };
+  const crossK = ks.find(k => F.levels[k] === 'up' || F.levels[k] === 'down'); if (crossK) return { kind: 'cross', k: crossK, text: `latest ${LLABEL[crossK]} cross first` };
+  return { kind: 'vol', text: 'volume' };
+}
+function sorted(list) {
+  const s = F.sort, bad = v => v == null || (typeof v === 'number' && !isFinite(v));
+  if (s.key && COL[s.key] && COL[s.key].val) {
+    const c = COL[s.key], get = s.dir === 'near' ? r => { const v = c.val(r); return bad(v) ? null : Math.abs(v); } : c.val;
+    list.sort((a, b) => { const x = get(a), y = get(b); if (bad(x) && bad(y)) return 0; if (bad(x)) return 1; if (bad(y)) return -1; const d = typeof x === 'string' ? x.localeCompare(y) : x - y; return s.dir === 'desc' ? -d : d; });
+    $('stOrder').textContent = `${colLabel(c)} ${s.dir === 'asc' ? 'ascending' : s.dir === 'near' ? 'nearest first' : 'descending'}`;
+    return list;
+  }
+  const o = implicitOrder();
+  if (o.kind === 'near') list.sort((a, b) => Math.abs(a.lv[o.k].dist) - Math.abs(b.lv[o.k].dist));
+  else if (o.kind === 'cross') list.sort((a, b) => (cross(a, o.k) || { ago: 99 }).ago - (cross(b, o.k) || { ago: 99 }).ago || (b.vol24 || 0) - (a.vol24 || 0));
+  else list.sort((a, b) => (b.vol24 || 0) - (a.vol24 || 0));
+  $('stOrder').textContent = o.text;
+  return list;
+}
+
+/* ========================= Controls ========================= */
+const seg = (items, cur, act, label) => `<div class="seg" role="group" aria-label="${label}">${items.map(([v, l]) => `<button data-a="${act}" data-v="${v}" aria-pressed="${cur === v}">${l}</button>`).join('')}</div>`;
+const nearSeg = () => seg(NEARS, F.near, 'near', 'Range of near');
+const tick = on => on ? '<svg class="tick"><use href="#i-check"/></svg>' : '';
+function renderTop() {
+  const v = LAB.variant, n = activeCount(); let right = '';
+  if (LAB.filter === 'button') right += `<button class="btn" data-a="pop" data-v="filters" aria-haspopup="true" aria-expanded="${POP.name === 'filters'}"><svg><use href="#i-filter"/></svg>Filters${n ? `<span class="count">${n}</span>` : ''}</button>`;
+  if (v === 'B') right += `<button class="btn${F.drawer ? ' -on' : ''}" data-a="drawer" aria-expanded="${F.drawer}"><svg><use href="#i-cols"/></svg>Columns</button>`;
+  if (v === 'C') right += F.edit ? '<button class="btn -primary" data-a="edit">Done</button>' : '<button class="btn" data-a="edit"><svg><use href="#i-cols"/></svg>Customize</button>';
+  const tabs = LAB.presets ? `<div class="scr__tabs -views" role="group" aria-label="View">${[['my', 'My table', 'Your own columns and order'], ...Object.entries(PRESETS).map(([k, p]) => [k, p.label, p.title])].map(([k, l, t]) => `<button class="tab" data-a="view" data-v="${k}" aria-pressed="${F.view === k}" title="${t}">${l}</button>`).join('')}</div>` : '';
+  let html = `<div class="bar">${tabs}<label class="search"><svg><use href="#i-search"/></svg><input id="search" type="search" placeholder="Search symbol" aria-label="Search symbol" autocomplete="off" value="${esc(F.search)}"></label>${seg(CLASSES, F.cls, 'cls', 'Asset class')}<span class="bar__grow"></span>${right}</div>`;
+  if (n) {
+    const chips = [];
+    if (F.sector) chips.push(['sector', '', `<b>Sector</b> ${esc(F.sector)}`]);
+    Object.keys(F.nums).forEach(k => chips.push(['num', k, `<b>${esc(colLabel(COL[k]))}</b> ${opSign(F.nums[k].op)} ${thr(k, F.nums[k].v)}`]));
+    Object.keys(F.levels).forEach(k => chips.push(['lv', k, `<b>${LLABEL[k]}</b> ${mLabel(F.levels[k]).toLowerCase()}${F.levels[k] === 'near' ? ' ' + NEARS.find(x => x[0] === F.near)[1] : ''}`]));
+    html += `<div class="scr__filters">${chips.map(([t, k, l]) => `<span class="chip">${l}<button data-a="chipx" data-v="${t}" data-k="${k}" title="Remove filter"><svg><use href="#i-close"/></svg></button></span>`).join('')}${chips.length > 1 ? '<button class="btn -ghost" data-a="clear">Clear</button>' : ''}</div>`;
+  }
+  if (v === 'C' && F.edit) {
+    const s = SUGGEST.filter(k => !F.cols.includes(k)).slice(0, 7);
+    html += `<div class="bar -sub">${s.map(k => `<button class="btn -add" data-a="col" data-k="${k}" title="${esc(COL[k].title || 'Add this column')}"><svg><use href="#i-plus"/></svg>${esc(colLabel(COL[k]))}</button>`).join('')}<button class="btn -ghost" data-a="pop" data-v="catalog" aria-haspopup="true" aria-expanded="${POP.name === 'catalog'}">All columns<svg><use href="#i-down"/></svg></button><span class="bar__grow"></span><button class="btn -ghost" data-a="reset">Reset</button></div>`;
+  }
+  $('top').innerHTML = html;
+}
+function catalogList() {
+  const q = CAT.q.trim().toLowerCase();
+  return CATALOG.map(g => {
+    const items = g.items.filter(it => !q || (g.g + ' ' + it.name + ' ' + it.desc).toLowerCase().includes(q)); if (!items.length) return '';
+    return `<div class="pop__group">${g.g}</div>` + items.map(it => `<div class="cat__item"><div class="cat__text"><b>${it.name}</b><span>${it.desc}</span></div><div class="cat__keys">${it.keys.map(([k, l]) => { const on = F.cols.includes(k); return `<button class="ck" data-a="col" data-k="${k}" aria-pressed="${on}" title="${on ? 'Remove from the table' : 'Add to the table'}">${l || (on ? 'Added' : 'Add')}</button>`; }).join('')}</div></div>`).join('');
+  }).join('') || '<div class="empty">Nothing found</div>';
+}
+const catalogHtml = () => `<div class="cat"><label class="search cat__search"><svg><use href="#i-search"/></svg><input id="catq" type="search" placeholder="Find a metric" aria-label="Find a metric" autocomplete="off" value="${esc(CAT.q)}"></label><div class="cat__list" id="catlist">${catalogList()}</div></div>`;
+// Quick filter options of one column, as menu rows (in the column menu) or as chips (in the Filters popover).
+function filterOptions(k, asChips) {
+  const c = COL[k];
+  const item = (act, attrs, label, on, n) => asChips ? `<button class="opt" data-a="${act}" ${attrs} aria-pressed="${on}">${label}${n != null ? `<i>${n}</i>` : ''}</button>` : `<button class="pop__row" data-a="${act}" ${attrs} role="menuitemcheckbox" aria-checked="${on}">${label}${tick(on)}${n != null ? `<span class="hint">${n}</span>` : ''}</button>`;
+  if (c.level) return LMODES.map(([m]) => item('lv', `data-k="${k}" data-m="${m}"`, mLabel(m), F.levels[k] === m, countLevel(k, m))).join('');
+  if (k === 'sector') return asChips ? `<select class="fin${F.sector ? ' -on' : ''}" data-f="sector" aria-label="Sector"><option value="">All sectors</option>${sectorCounts().map(([s, n]) => `<option value="${esc(s)}"${F.sector === s ? ' selected' : ''}>${esc(s)} ${n}</option>`).join('')}</select>` : `<div class="pop__wrap">${sectorCounts().map(([s, n]) => item('sector', `data-v="${esc(s)}"`, esc(s), F.sector === s, n)).join('')}</div>`;
+  if (c.q) return c.q.map(([op, v]) => item('num', `data-k="${k}" data-op="${op}" data-v="${v}"`, `${opSign(op)} ${thr(k, v)}`, isNum(k, op, v))).join('');
+  return '';
+}
+function popHeader(k) {
+  const c = COL[k], s = F.sort.key === k ? F.sort.dir : null, first = c.text ? 'asc' : 'desc', second = c.text ? 'desc' : 'asc';
+  const row = (act, attrs, label, on, cls = '') => `<button class="pop__row${cls}" data-a="${act}" ${attrs} aria-checked="${!!on}">${label}${tick(on)}</button>`;
+  let h = '';
+  if (c.val) {
+    h += row('sortset', `data-k="${k}" data-v="${first}"`, c.text ? 'Sort A to Z' : 'Sort high to low', s === first) + row('sortset', `data-k="${k}" data-v="${second}"`, c.text ? 'Sort Z to A' : 'Sort low to high', s === second);
+    if (c.level) h += row('sortset', `data-k="${k}" data-v="near"`, 'Nearest to the level first', s === 'near');
+  }
+  if (LAB.filter === 'menu') { const f = filterOptions(k, false); if (f) h += `${h ? '<div class="pop__sep"></div>' : ''}<div class="pop__group">Show only</div>${f}${c.level ? `<div class="pop__foot -split"><span class="lbl">Near is within</span>${nearSeg()}</div>` : ''}`; }
+  if (k !== 'symbol' && LAB.variant !== 'C') h += `${h ? '<div class="pop__sep"></div>' : ''}` + row('nudge', `data-k="${k}" data-v="-1"`, 'Move left') + row('nudge', `data-k="${k}" data-v="1"`, 'Move right') + row('hide', `data-k="${k}"`, 'Hide column');
+  return h;
+}
+function popFilters() {
+  const rows = F.cols.map(k => { const o = filterOptions(k, true); return o ? `<span class="fr__l">${esc(colLabel(COL[k]))}</span><div class="qopts">${o}</div>` : ''; }).join('');
+  const hasLevel = F.cols.some(k => COL[k].level), n = activeCount();
+  return `<div class="fr">${rows}</div>` + (hasLevel || n ? `<div class="pop__foot -split">${hasLevel ? `<span class="lbl">Near is within</span>${nearSeg()}` : '<span></span>'}${n ? '<button class="btn -ghost" data-a="clear">Clear</button>' : ''}</div>` : '');
+}
+
+/* ========================= Render ========================= */
+const dragOn = () => LAB.variant !== 'C' || F.edit;
+function renderLab() {
+  $('variantSeg').innerHTML = VARIANTS.map(([v, l]) => `<button data-a="variant" data-v="${v}" aria-pressed="${LAB.variant === v}">${l}</button>`).join('');
+  $('filterSeg').innerHTML = FMODES.map(([v, l]) => `<button data-a="lfilter" data-v="${v}" aria-pressed="${LAB.filter === v}" title="${v === 'menu' ? 'A filter is an action of its column: open the column menu' : 'One Filters button lists quick filters for the columns that are in the table'}">${l}</button>`).join('');
+  $('presetsBtn').setAttribute('aria-pressed', LAB.presets);
+  $('note').textContent = NOTES[LAB.variant];
+}
+function renderHead() {
+  const edit = LAB.variant === 'C' && F.edit;
+  $('wrap').classList.toggle('-reorder', dragOn()); $('wrap').classList.toggle('-editing', edit);
+  $('thead').innerHTML = '<tr>' + F.cols.map(k => {
+    const c = COL[k], s = F.sort.key === k ? F.sort.dir : null, name = esc(colLabel(c));
+    const flt = !!(F.levels[k] || F.nums[k] || (k === 'sector' && F.sector));
+    const icon = c.val ? `<svg class="srt"><use href="#${s === 'asc' ? 'i-up' : s === 'near' ? 'i-near' : 'i-down'}"/></svg>` : '';
+    const grip = edit && k !== 'symbol' ? '<svg class="grip"><use href="#i-grip"/></svg>' : '';
+    const ctl = edit ? (k !== 'symbol' ? `<button class="hx" data-a="hide" data-k="${k}" aria-label="Remove ${name}" title="Remove column"><svg><use href="#i-close"/></svg></button>` : '')
+      : `<button class="hm" data-a="hmenu" data-k="${k}" aria-haspopup="true" aria-expanded="${POP.name === 'hmenu' && POP.k === k}" aria-label="${name} column menu" title="Column menu"><svg><use href="#i-more"/></svg></button>`;
+    return `<th data-k="${k}" data-a="sort" class="${c.end ? '-end' : ''}${flt ? ' -flt' : ''}"${s ? ` aria-sort="${s === 'asc' ? 'ascending' : s === 'near' ? 'other' : 'descending'}"` : ''}${c.pin ? ' data-pin="left"' : ''} title="${esc(c.title || '')}"><span class="lbl">${grip}${name}${icon}</span>${ctl}</th>`;
+  }).join('') + `<th class="-tail"${LAB.variant === 'A' ? ' data-pin="right"' : ''}>${LAB.variant === 'A' ? `<button class="btn -ghost -icon addcol" data-a="pop" data-v="catalog" aria-haspopup="true" aria-expanded="${POP.name === 'catalog'}" title="Add a column"><svg><use href="#i-plus"/></svg></button>` : ''}</th></tr>`;
+}
+function renderBody() {
+  const list = sorted(S.rows.filter(r => passes(r))), limit = 400, tail = `<td class="-tail"${LAB.variant === 'A' ? ' data-pin="right"' : ''}></td>`;
+  $('tbody').innerHTML = list.length ? list.slice(0, limit).map(r => `<tr data-id="${r.id}" aria-selected="${r.id === F.selected}">` + F.cols.map(k => {
+    const c = COL[k];
+    const html = k === 'symbol' ? `<span class="instrument-cell"><span class="instrument-cell__text"><span class="instrument-cell__base">${esc(r.base)}</span><span class="instrument-cell__rest">${esc(r.quote)} SWAP</span></span></span>`
+      : k === 'spark' ? sparkline(r.spark, ok(r.chg['24h']) && r.last > 0 ? r.last / (1 + r.chg['24h']) : 0) : c.fmt(r);
+    return `<td class="${c.end ? '-end' : ''}"${c.pin ? ' data-pin="left"' : ''}>${html}</td>`;
+  }).join('') + tail + '</tr>').join('') : `<tr><td colspan="${F.cols.length + 1}" class="empty">No instruments match</td></tr>`;
+  $('stTotal').textContent = S.rows.length; $('stShown').textContent = list.length;
+  $('stUpdated').textContent = S.ts ? new Date(S.ts).toLocaleTimeString('en-GB') : 'never';
+}
+// Re-rendering a scrolling panel must not throw the reader back to its top or drop the caret of its search field.
+function keepPanel(el, sel, paint) {
+  const st = el.querySelector(sel) ? el.querySelector(sel).scrollTop : 0, focused = document.activeElement && document.activeElement.id === 'catq';
+  paint();
+  if (el.querySelector(sel)) el.querySelector(sel).scrollTop = st;
+  if (focused && $('catq')) { const i = $('catq'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+}
+function renderPop() {
+  const el = $('pop'); if (!POP.name) { el.hidden = true; return; }
+  const anchor = POP.name === 'hmenu' ? document.querySelector(`[data-a="hmenu"][data-k="${POP.k}"]`) : document.querySelector(`[data-a="pop"][data-v="${POP.name}"]`);
+  if (!anchor) { POP.name = null; el.hidden = true; return; }
+  keepPanel(el, '.cat__list', () => { el.innerHTML = POP.name === 'hmenu' ? popHeader(POP.k) : POP.name === 'catalog' ? catalogHtml() : popFilters(); });
+  el.hidden = false; const r = anchor.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+  el.style.left = Math.max(8, Math.min(POP.name === 'hmenu' ? r.left - 8 : r.right - w, innerWidth - w - 8)) + 'px';
+  el.style.top = Math.max(8, Math.min(r.bottom + 4, innerHeight - h - 8)) + 'px';
+}
+function renderDrawer() {
+  const el = $('drawer'), open = LAB.variant === 'B' && F.drawer; el.hidden = !open; if (!open) return;
+  keepPanel(el, '.drawer__body', () => {
+    el.innerHTML = `<div class="drawer__head"><b>Columns</b><span class="mid">${F.cols.length} shown</span><span class="bar__grow"></span><button class="btn -ghost -icon" data-a="drawer" title="Close"><svg><use href="#i-close"/></svg></button></div>
+      <div class="drawer__body"><div class="pop__group">In the table</div><div class="dl">${F.cols.map(k => `<div class="dl__row" data-k="${k}"${k === 'symbol' ? ' data-locked title="Symbol always stays first"' : ' title="Drag to reorder"'}><svg class="dl__grip"><use href="#i-grip"/></svg><span>${esc(colLabel(COL[k]))}</span>${k === 'symbol' ? '' : `<button class="dl__x" data-a="hide" data-k="${k}" title="Remove from the table" aria-label="Remove ${esc(colLabel(COL[k]))}"><svg><use href="#i-close"/></svg></button>`}</div>`).join('')}</div>
+      <div class="pop__group">Add a column</div>${catalogHtml()}</div>
+      <div class="drawer__foot"><button class="btn -ghost" data-a="reset">Reset to default</button></div>`;
+  });
+}
+function render() { renderLab(); renderTop(); renderHead(); renderBody(); renderPop(); renderDrawer(); }
+function closePop() { if (POP.name) { POP.name = POP.k = null; $('pop').hidden = true; document.querySelectorAll('[aria-expanded="true"][data-a="pop"], [aria-expanded="true"][data-a="hmenu"]').forEach(b => b.setAttribute('aria-expanded', 'false')); } }
+
+/* ========================= Drag to reorder (the terminal's pointer pattern: 4px threshold, coloured source, edge line on the target) ========================= */
+function makeDrag(root, selector, axis, canDrag) {
+  let g = null, target = null, edge = null, suppress = false;
+  const paint = () => root.querySelectorAll(selector).forEach(el => { el.toggleAttribute('data-dragging', !!(g && g.active && el.dataset.k === g.key)); if (target && el.dataset.k === target) el.dataset.dropEdge = edge; else delete el.dataset.dropEdge; });
+  const finish = () => { if (suppress) setTimeout(() => { suppress = false; }, 0); g = target = edge = null; removeEventListener('pointermove', move); removeEventListener('pointerup', drop); removeEventListener('pointercancel', finish); document.body.classList.remove('-dragging'); paint(); };
+  function move(e) {
+    if (!g || e.pointerId !== g.id) return;
+    if (!g.active && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 4) return;
+    g.active = true; suppress = true; e.preventDefault(); document.body.classList.add('-dragging'); closePop();
+    const hit = document.elementFromPoint(e.clientX, e.clientY), el = hit && hit.closest(selector); target = edge = null;
+    if (el && root.contains(el) && el.dataset.k !== g.key && el.dataset.k !== 'symbol') { target = el.dataset.k; const r = el.getBoundingClientRect(); edge = (axis === 'x' ? e.clientX < r.left + r.width / 2 : e.clientY < r.top + r.height / 2) ? 'before' : 'after'; }
+    paint();
+  }
+  function drop(e) { if (!g || e.pointerId !== g.id) return; move(e); const k = g.key, t = target, ed = edge, did = g.active; finish(); if (did && t) { moveCol(k, t, ed); render(); } }
+  root.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !canDrag() || e.target.closest('button, input, select')) return;
+    const el = e.target.closest(selector); if (!el || !root.contains(el) || !el.dataset.k || el.dataset.k === 'symbol') return;
+    g = { key: el.dataset.k, x: e.clientX, y: e.clientY, id: e.pointerId, active: false };
+    addEventListener('pointermove', move); addEventListener('pointerup', drop); addEventListener('pointercancel', finish);
+  });
+  root.addEventListener('click', e => { if (suppress) { e.stopPropagation(); e.preventDefault(); } }, true);
+}
+makeDrag($('thead'), 'th[data-k]', 'x', dragOn);
+makeDrag($('drawer'), '.dl__row', 'y', () => true);
+
+/* ========================= Events ========================= */
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-a]');
+  const row = !t && e.target.closest('#tbody tr[data-id]');
+  if (row) { F.selected = row.dataset.id; const r = S.rows.find(x => x.id === F.selected); if (r) { $('headerSymbolText').textContent = r.base; $('headerSymbolRest').textContent = r.quote + ' SWAP'; } renderBody(); }
+  if (!t) { if (!e.target.closest('#pop')) closePop(); return; }
+  const a = t.dataset.a, v = t.dataset.v, k = t.dataset.k, m = t.dataset.m;
+  if (a !== 'pop' && a !== 'hmenu' && !t.closest('#pop')) closePop();
+  switch (a) {
+    case 'variant': LAB.variant = v; store.set('variant', v); closePop(); F.edit = false; F.drawer = false; return render();
+    case 'lfilter': LAB.filter = v; store.set('filter', v); closePop(); return render();
+    case 'lpresets': LAB.presets = !LAB.presets; store.set('presets', LAB.presets); if (!LAB.presets) switchView('my'); return render();
+    case 'theme': { const root = document.documentElement; const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; root.dataset.theme = dark ? 'light' : 'dark'; return; }
+    case 'view': switchView(v); return render();
+    case 'pop': if (POP.name === v) return closePop(); POP.name = v; POP.k = null; CAT.q = ''; render(); if (v === 'catalog' && $('catq')) $('catq').focus(); return;
+    case 'hmenu': if (POP.name === 'hmenu' && POP.k === k) return closePop(); POP.name = 'hmenu'; POP.k = k; return render();
+    case 'cls': F.cls = v; if (v === 'stock' || v === 'commodity') F.sector = ''; return render();
+    case 'near': F.near = v; return render();
+    case 'sector': F.sector = F.sector === v ? '' : v; return render();
+    case 'lv': toggleLevel(k, m); return render();
+    case 'num': toggleNum(k, t.dataset.op, +v); return render();
+    case 'chipx': if (v === 'sector') F.sector = ''; else if (v === 'num') delete F.nums[k]; else delete F.levels[k]; return render();
+    case 'clear': F.sector = ''; F.nums = {}; F.levels = {}; closePop(); return render();
+    case 'col': if (F.cols.includes(k)) hideCol(k); else addCol(k); return render();
+    case 'hide': hideCol(k); closePop(); return render();
+    case 'nudge': nudgeCol(k, +v); return render();
+    case 'reset': F.cols = DEFAULT_COLS.slice(); F.nums = {}; F.levels = {}; F.sector = ''; F.sort = { key: null, dir: null }; saveCols(); closePop(); return render();
+    case 'drawer': F.drawer = !F.drawer; CAT.q = ''; return render();
+    case 'edit': F.edit = !F.edit; closePop(); return render();
+    case 'sortset': F.sort = F.sort.key === k && F.sort.dir === v ? { key: null, dir: null } : { key: k, dir: v }; closePop(); return render();
+    case 'sort': {   // header click: first direction, the other one, then back to the default order
+      const c = COL[k]; if (!c || !c.val) return; const first = c.text ? 'asc' : 'desc', second = c.text ? 'desc' : 'asc', s = F.sort;
+      F.sort = s.key !== k ? { key: k, dir: first } : s.dir === first ? { key: k, dir: second } : { key: null, dir: null };
+      renderHead(); return renderBody();
+    }
+  }
+});
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'search') { F.search = t.value; return renderBody(); }
+  if (t.id === 'catq') { CAT.q = t.value; $('catlist').innerHTML = catalogList(); }
+});
+document.addEventListener('change', e => { const t = e.target; if (t.dataset && t.dataset.f === 'sector') { F.sector = t.value; render(); } });
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (POP.name) return closePop(); if (F.drawer) { F.drawer = false; return render(); } if (F.edit) { F.edit = false; render(); } });
+$('wrap').addEventListener('scroll', e => { e.currentTarget.classList.toggle('-scrolled', e.currentTarget.scrollLeft > 0); if (POP.name === 'hmenu') closePop(); });
+
+/* ========================= Boot ========================= */
+(async function boot() {
+  await load(); render();
+  if (S.live) setInterval(async () => { await load(); renderBody(); }, 3000);
+})();
+</script>
