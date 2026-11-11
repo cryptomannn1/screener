@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"screener/internal/collector"
+	"screener/internal/metrics"
 )
 
 type fakeRows []collector.Row
@@ -74,19 +75,32 @@ func exchanges(t *testing.T) *httptest.Server {
 		}
 		write(w, m{"openInterest": oi})
 	})
-	bars := func(r *http.Request, daily bool) (start, step int64, n int) {
-		n, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+	// An hourly bar opens where the one before it closed; every daily bar opens at 1.9 (the level tests read it).
+	open := func(i int, daily bool) string {
 		if daily {
+			return "1.9"
+		}
+		return fmt.Sprint(px(i + 1))
+	}
+	minStart := time.Now().Truncate(time.Minute).UnixMilli()
+	bars := func(r *http.Request, size string) (start, step int64, n int) {
+		n, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+		switch size {
+		case "d":
 			return dayStart, 86_400_000, n
+		case "m":
+			return minStart, 60_000, n
 		}
 		return hourStart, 3_600_000, n
 	}
 	mux.HandleFunc("/fapi/v1/klines", func(w http.ResponseWriter, r *http.Request) {
-		start, step, n := bars(r, r.URL.Query().Get("interval") == "1d")
+		size := map[string]string{"1d": "d", "1m": "m"}[r.URL.Query().Get("interval")]
+		daily := size == "d"
+		start, step, n := bars(r, size)
 		out := make([][]any, 0, n)
 		for i := n - 1; i >= 0; i-- { // oldest first
 			c := fmt.Sprint(px(i))
-			out = append(out, []any{start - int64(i)*step, "1.9", c, c, c, "5", start - int64(i)*step + step - 1, "10", 1, "2", "4", "0"})
+			out = append(out, []any{start - int64(i)*step, open(i, daily), c, c, c, "5", start - int64(i)*step + step - 1, "10", 1, "2", "4", "0"})
 		}
 		write(w, out)
 	})
@@ -110,11 +124,13 @@ func exchanges(t *testing.T) *httptest.Server {
 			tk("SHIB1000USDT", "2", "0.01", "40", "20", "", "1.99"), tk("AMDSTOCKUSDT", "500", "0.09", "30", "10", "0", "499")})
 	})
 	mux.HandleFunc("/v5/market/kline", func(w http.ResponseWriter, r *http.Request) {
-		start, step, n := bars(r, r.URL.Query().Get("interval") == "D")
+		size := map[string]string{"D": "d", "1": "m"}[r.URL.Query().Get("interval")]
+		daily := size == "d"
+		start, step, n := bars(r, size)
 		out := make([][]string, 0, n)
 		for i := 0; i < n; i++ { // newest first
 			c := fmt.Sprint(px(i))
-			out = append(out, []string{strconv.FormatInt(start-int64(i)*step, 10), "1.9", c, c, c, "5", "10"})
+			out = append(out, []string{strconv.FormatInt(start-int64(i)*step, 10), open(i, daily), c, c, c, "5", "10"})
 		}
 		bybit(w, out)
 	})
@@ -215,16 +231,48 @@ func TestAssetsOverThreeExchanges(t *testing.T) {
 
 	// Outside OKX the metrics come from candles: close falls 0.1% per bar going back, last is 2.
 	// SHIB1000 is quoted per thousand coins, so its candles are brought to one coin like its price.
+	// The changes are rolling windows. With one-minute bars loaded the hour is measured on them.
+	midTime := time.Now().Truncate(time.Hour).Add(30 * time.Minute)
+	buildMid := func() map[string]Asset {
+		m := map[string]Asset{}
+		for _, a := range s.build(midTime) {
+			m[a.K] = a
+		}
+		return m
+	}
+	mid := buildMid()
+	for k, unit := range map[string]float64{"c:SHIB": 0.001, "c:XYZ": 1} {
+		se := s.series[k]
+		if len(se.minute) < 290 || se.minuteAt.IsZero() {
+			t.Fatalf("%s: one-minute bars not loaded: %d", k, len(se.minute))
+		}
+		want := 2*unit/metrics.PriceAt(se.minute, metrics.MinuteMs, midTime.UnixMilli()-3_600_000) - 1
+		if got := float64(mid[k].M.Chg["1h"]); !near(got, want) || got < 0.05 {
+			t.Errorf("%s chg 1h off the minute bars = %v, want %v", k, got, want)
+		}
+	}
+	// Without them (just started, a hole) the hourly bars stand in: half past the hour, an hour ago is half way
+	// through the previous hourly bar.
+	for _, se := range s.series {
+		se.minute, se.minuteAt = nil, time.Time{}
+	}
+	mid = buildMid()
+	pxAt := func(i int) float64 { return 2 * (1 - 0.001*float64(i)) }
 	for k, unit := range map[string]float64{"c:SHIB": 0.001, "c:XYZ": 1} {
 		a := by[k]
 		if len(a.V) != 1 {
 			t.Errorf("%s exchanges: %v", k, a.V)
 		}
-		if got, want := float64(a.M.Chg["1h"]), 2/(2*(1-0.001))-1; !near(got, want) {
+		if got, want := float64(mid[k].M.Chg["1h"]), 2/((pxAt(1)+pxAt(2))/2)-1; !near(got, want) {
 			t.Errorf("%s chg 1h = %v, want %v", k, got, want)
 		}
-		if got, want := float64(a.M.Chg7d), 2/(2*(1-0.007))-1; !near(got, want) {
-			t.Errorf("%s chg 7d = %v, want %v", k, got, want)
+		if got, want := float64(mid[k].M.Chg7d), 2/((pxAt(168)+pxAt(169))/2)-1; !near(got, want) {
+			t.Errorf("%s chg 7d (off the hourly bars) = %v, want %v", k, got, want)
+		}
+		// Every fake bar carries the same volume, the forming one too: the last hour is that bar plus the share of
+		// the previous one the hour had left when the candles were read, so between one and two norms.
+		if got := float64(mid[k].M.VolX["1h"]); !(got >= 1 && got <= 2) {
+			t.Errorf("%s vol x 1h = %v, want within [1, 2]", k, got)
 		}
 		if len(a.M.Spark) != 24 || !near(float64(a.M.Spark[23]), 2*unit) {
 			t.Errorf("%s spark: %v", k, a.M.Spark)

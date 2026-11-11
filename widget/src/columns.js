@@ -130,7 +130,7 @@ export const COLUMNS = [
     unit: 'pct',
     signed: true,
     def: true,
-    title: 'Change against the UTC daily close 7 days ago.',
+    title: 'Change over the last 7 days, a rolling window.',
     value: field('chg7d'),
     format: (v) => f.pct(v),
   },
@@ -184,7 +184,7 @@ export const COLUMNS = [
     unit: 'x',
     def: false,
     title:
-      'Volume of the selected period against the average of the same window over the previous 7 days.',
+      'Volume of the last hours of the selected period, a rolling window, against the average of the same window over the previous 7 days.',
     value: perPeriod('volx'),
     format: f.multiple,
   },
@@ -341,7 +341,7 @@ export const COLUMNS = [
     unit: 'x',
     def: true,
     title:
-      "Today's true range against the median daily true range of the last 20 days. Below 0.6 is a squeeze, above 1.6 an expansion.",
+      'True range of the last 24 hours against the median daily true range of the last 20 days. Below 0.6 is a squeeze, above 1.6 an expansion.',
     value: field('regime'),
     format: f.regime,
   },

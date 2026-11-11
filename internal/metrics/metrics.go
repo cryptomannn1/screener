@@ -32,6 +32,161 @@ func Change(last float64, bars []Bar, n int) float64 {
 	return last/bars[n].C - 1
 }
 
+// HourMs is the length of an hourly bar in milliseconds.
+const HourMs = int64(time.Hour / time.Millisecond)
+
+// PriceAt estimates the price at ts (Unix ms) from bars of length step (ms),
+// newest first: the bar that contains ts, read as a straight line from its
+// open to its close. NaN when no bar covers ts.
+func PriceAt(bars []Bar, step, ts int64) float64 {
+	if len(bars) == 0 || step <= 0 {
+		return NaN
+	}
+	i := 0
+	if ts < bars[0].TS {
+		i = int((bars[0].TS - ts + step - 1) / step) // where the bar sits in a series without gaps
+	}
+	if i >= len(bars) || bars[i].TS > ts || ts >= bars[i].TS+step {
+		i = -1
+		for k := range bars { // a gap: find the bar by its time
+			if bars[k].TS+step <= ts {
+				break // newest first: every older bar ends even earlier
+			}
+			if bars[k].TS <= ts {
+				i = k
+				break
+			}
+		}
+		if i < 0 {
+			return NaN
+		}
+	}
+	b := bars[i]
+	if b.O <= 0 || b.C <= 0 {
+		return NaN
+	}
+	return b.O + (b.C-b.O)*float64(ts-b.TS)/float64(step)
+}
+
+// ChangeOver returns last / the price one window before now - 1. The window
+// is rolling: it always spans the whole period, wherever now falls inside a
+// bar. Change, by contrast, measures from the close of a bar, so its "1 hour"
+// is only the minutes since the hour began. The reference price is read off
+// the bar that contains that moment (PriceAt). NaN without history that far.
+func ChangeOver(last float64, bars []Bar, step int64, now time.Time, window time.Duration) float64 {
+	if last <= 0 || window <= 0 {
+		return NaN
+	}
+	ref := PriceAt(bars, step, now.UnixMilli()-window.Milliseconds())
+	if math.IsNaN(ref) || ref <= 0 {
+		return NaN
+	}
+	return last/ref - 1
+}
+
+// MinuteMs is the length of a one-minute bar in milliseconds.
+const MinuteMs = int64(time.Minute / time.Millisecond)
+
+// ChangeHours is the rolling change over h hours: off the one-minute bars
+// when they reach that far back, else off the hourly bars, where the price
+// inside a bar is only an estimate (on a 1 h change it is off by about 0.6%
+// on average, against under 0.01% with one-minute bars).
+func ChangeHours(last float64, minute, hourly []Bar, now time.Time, h int) float64 {
+	w := time.Duration(h) * time.Hour
+	if v := ChangeOver(last, minute, MinuteMs, now, w); !math.IsNaN(v) {
+		return v
+	}
+	return ChangeOver(last, hourly, HourMs, now, w)
+}
+
+// VolumeIn sums the quote volume traded inside [from, to) (Unix ms) off bars
+// of length step, newest first. A bar that lies partly inside the window
+// counts by the share inside it, as if it traded evenly; the forming bar, the
+// one to falls in, has traded only up to to, so all of it is inside. NaN when
+// the bars do not cover the window: no history back to from, a gap, or a
+// newest bar that ended more than one step before to.
+func VolumeIn(bars []Bar, step, from, to int64) float64 {
+	if len(bars) == 0 || step <= 0 || to <= from {
+		return NaN
+	}
+	if end := bars[0].TS + step; end < to {
+		if to-end > step {
+			return NaN
+		}
+		to = end // the newest bar has not appeared yet: the window ends where the data ends
+	}
+	sum, covered := 0.0, int64(0)
+	for _, b := range bars {
+		t0, t1 := b.TS, b.TS+step
+		if t1 <= from {
+			break
+		}
+		if t0 >= to {
+			continue
+		}
+		a, z := max(t0, from), min(t1, to)
+		span := step
+		if t1 > to {
+			span = to - t0 // the forming bar
+		}
+		if span > 0 {
+			sum += b.QuoteVol * float64(z-a) / float64(span)
+		}
+		covered += z - a
+	}
+	if covered < to-from {
+		return NaN
+	}
+	return sum
+}
+
+// hourlyNorm is the average quote volume of the complete hourly bars that
+// ended at or before the given moment, the newest lookback of them. NaN with
+// fewer than atLeast such bars.
+func hourlyNorm(hourly []Bar, before int64, lookback, atLeast int) float64 {
+	sum, n := 0.0, 0
+	for _, b := range hourly {
+		if b.TS+HourMs > before {
+			continue
+		}
+		sum += b.QuoteVol
+		if n++; n == lookback {
+			break
+		}
+	}
+	if n == 0 || n < atLeast || sum <= 0 {
+		return NaN
+	}
+	return sum / float64(n)
+}
+
+// VolVsHours is the volume of the last h hours divided by the average h-hour
+// volume of the lookback complete hours before them. The last h hours end
+// when the one-minute bars were read and are summed off those bars; when they
+// do not cover the window (the service has just started, a gap, a 24 h
+// window) the hourly bars stand in: see VolVsPeriod.
+func VolVsHours(minute []Bar, minuteAt time.Time, hourly []Bar, hourlyAt time.Time, h, lookback int) float64 {
+	if h > 0 && !minuteAt.IsZero() {
+		to := minuteAt.UnixMilli()
+		from := to - int64(h)*HourMs
+		if recent := VolumeIn(minute, MinuteMs, from, to); !math.IsNaN(recent) {
+			if norm := hourlyNorm(hourly, from, lookback, h); !math.IsNaN(norm) {
+				return recent / (norm * float64(h))
+			}
+		}
+	}
+	return VolVsPeriod(hourly, h, lookback, hourlyAt)
+}
+
+// ChangeDays is the change over n days: rolling, off the hourly bars, when
+// they reach that far back, else from the daily close n days ago.
+func ChangeDays(last float64, hourly, daily []Bar, now time.Time, n int) float64 {
+	if v := ChangeOver(last, hourly, HourMs, now, time.Duration(n)*24*time.Hour); !math.IsNaN(v) {
+		return v
+	}
+	return Change(last, daily, n)
+}
+
 // ATRPct is the Wilder ATR over the last n COMPLETE bars divided by last:
 // the average true range as a share of price. Needs n+1 bars after the forming
 // one.
@@ -102,11 +257,14 @@ func meanStd(xs []float64) (mean, sd float64) {
 	return
 }
 
-// VolRegime compares today's true range with the median true range of the
-// previous window complete days: < 0.6 reads as a squeeze, > 1.6 as an
-// expansion. daily newest first (daily[0] = today, forming).
-func VolRegime(daily []Bar, window int) float64 {
-	if len(daily) < 4 {
+// VolRegime compares the true range of the last 24 hours with the median true
+// range of the previous window complete days: < 0.6 reads as a squeeze, > 1.6
+// as an expansion. The last 24 hours come from the hourly bars (the forming
+// one included), not from the forming day: a day that has just begun has no
+// range yet and would read as a squeeze for every instrument. Both newest
+// first (daily[0] = today, forming).
+func VolRegime(hourly, daily []Bar, window int) float64 {
+	if len(daily) < 4 || len(hourly) < 25 {
 		return NaN
 	}
 	if window+2 > len(daily) {
@@ -117,11 +275,19 @@ func VolRegime(daily []Bar, window int) float64 {
 		trs = append(trs, trueRange(daily[i], daily[i+1])/daily[i].C)
 	}
 	med := median(trs)
-	if med <= 0 || daily[0].C <= 0 {
+	hi, lo := 0.0, math.Inf(1)
+	for i := 0; i < 24; i++ {
+		hi = math.Max(hi, hourly[i].H)
+		if hourly[i].L > 0 {
+			lo = math.Min(lo, hourly[i].L)
+		}
+	}
+	last, prev := hourly[0].C, hourly[24].C
+	if med <= 0 || last <= 0 || prev <= 0 || hi <= 0 || math.IsInf(lo, 1) {
 		return NaN
 	}
-	today := trueRange(daily[0], daily[1]) / daily[0].C
-	return today / med
+	tr := math.Max(hi-lo, math.Max(math.Abs(hi-prev), math.Abs(lo-prev)))
+	return tr / last / med
 }
 
 func median(xs []float64) float64 {
@@ -201,18 +367,28 @@ func VolVsDays(vol24 float64, daily []Bar, n int) float64 {
 	return vol24 / (sum / float64(n))
 }
 
-// VolVsPeriod is the quote volume of the last h hours (complete bars plus the
-// forming one) divided by the average h-hour volume over the previous lookback
-// hours. hourly newest first.
-func VolVsPeriod(hourly []Bar, h, lookback int) float64 {
+// VolVsPeriod is the quote volume of the last h hours divided by the average
+// h-hour volume over the lookback hours before them. The window is rolling
+// and ends at asOf, the moment the bars were read: the forming bar, the
+// complete bars inside the window and, of the bar the window begins in, the
+// share that falls inside it (as if that bar traded evenly). Counting only the
+// forming bar and the complete ones would make "the last hour" a few minutes
+// long right after an hour begins. A zero asOf counts the forming bar as
+// whole. hourly newest first.
+func VolVsPeriod(hourly []Bar, h, lookback int, asOf time.Time) float64 {
 	if h <= 0 || len(hourly) < h+1 {
 		return NaN
 	}
-	recent := 0.0
+	part := 1.0 // share of the forming bar that had passed at asOf
+	if !asOf.IsZero() {
+		part = math.Max(0, math.Min(1, float64(asOf.UnixMilli()-hourly[0].TS)/float64(HourMs)))
+	}
+	recent := (1 - part) * hourly[h].QuoteVol
 	for i := 0; i < h; i++ {
 		recent += hourly[i].QuoteVol
 	}
-	avail := len(hourly) - h
+	start := h + 1 // the norm: complete bars before the window
+	avail := len(hourly) - start
 	if lookback > avail {
 		lookback = avail
 	}
@@ -220,7 +396,7 @@ func VolVsPeriod(hourly []Bar, h, lookback int) float64 {
 		return NaN
 	}
 	base := 0.0
-	for i := h; i < h+lookback; i++ {
+	for i := start; i < start+lookback; i++ {
 		base += hourly[i].QuoteVol
 	}
 	if base <= 0 {

@@ -128,7 +128,7 @@ func (b *BybitClient) Tickers(ctx context.Context) (map[string]Ticker, error) {
 }
 
 // Klines returns the last limit candles, newest first (the forming bar is
-// bars[0]), in the exchange's price units. interval is "60" or "D" (UTC days).
+// bars[0]), in the exchange's price units. interval is "1", "60" or "D" (UTC days).
 func (b *BybitClient) Klines(ctx context.Context, symbol, interval string, limit int) ([]metrics.Bar, error) {
 	q := url.Values{"category": {"linear"}, "symbol": {symbol}, "interval": {interval}, "limit": {strconv.Itoa(limit)}}
 	list, _, err := bybitGet[[]string](ctx, b.g, "/v5/market/kline", q)

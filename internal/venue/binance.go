@@ -147,7 +147,7 @@ func (b *BinanceClient) OpenInterest(ctx context.Context, symbol string) (float6
 }
 
 // Klines returns the last limit candles, newest first (the forming bar is
-// bars[0]), in the exchange's price units. interval is "1h" or "1d" (UTC days).
+// bars[0]), in the exchange's price units. interval is "1m", "1h" or "1d" (UTC days).
 func (b *BinanceClient) Klines(ctx context.Context, symbol, interval string, limit int) ([]metrics.Bar, error) {
 	var raw [][]any
 	q := url.Values{"symbol": {symbol}, "interval": {interval}, "limit": {strconv.Itoa(limit)}}

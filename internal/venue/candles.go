@@ -10,6 +10,7 @@ import (
 const (
 	hourlyKeep = 220 // 168 h of returns and volume norm, with margin
 	dailyKeep  = 240 // MA200 and the 30-day change, with margin
+	minuteKeep = 300 // five hours of one-minute bars: the 4 h window with margin
 )
 
 type candleTarget struct {
@@ -121,6 +122,7 @@ func (s *Service) refreshSeries(ctx context.Context, t candleTarget) error {
 		s.series[t.key] = se
 	}
 	nh, nd, hAt, dAt := len(se.hourly), len(se.daily), se.hourlyAt, se.dailyAt
+	nm, mAt := len(se.minute), se.minuteAt
 	s.mu.Unlock()
 
 	now := time.Now()
@@ -129,7 +131,7 @@ func (s *Service) refreshSeries(ctx context.Context, t candleTarget) error {
 		if nh >= 170 {
 			limit = 4
 		}
-		bars, err := s.klines(ctx, t.inst, true, limit)
+		bars, err := s.klines(ctx, t.inst, "1h", limit)
 		if err != nil {
 			return err
 		}
@@ -144,7 +146,7 @@ func (s *Service) refreshSeries(ctx context.Context, t candleTarget) error {
 		if nd >= 60 {
 			limit = 3 // the history an asset has is loaded once; later only the fresh days
 		}
-		bars, err := s.klines(ctx, t.inst, false, limit)
+		bars, err := s.klines(ctx, t.inst, "1d", limit)
 		if err != nil {
 			return err
 		}
@@ -153,22 +155,32 @@ func (s *Service) refreshSeries(ctx context.Context, t candleTarget) error {
 		se.dailyAt = now
 		s.mu.Unlock()
 	}
+	if nm == 0 || now.Sub(mAt) >= s.cfg.MinuteEvery {
+		limit := minuteKeep
+		if nm >= minuteKeep-5 {
+			limit = min(minuteKeep, int(now.Sub(mAt)/time.Minute)+3) // every bar since the last read, so the series has no holes
+		}
+		bars, err := s.klines(ctx, t.inst, "1m", limit)
+		if err != nil {
+			return err
+		}
+		s.mu.Lock()
+		se.minute = mergeBars(se.minute, bars, 60_000, minuteKeep)
+		se.minuteAt = time.Now()
+		s.mu.Unlock()
+	}
 	return nil
 }
 
-// klines fetches candles of an instrument and brings prices to one coin.
-func (s *Service) klines(ctx context.Context, in Instrument, hourly bool, limit int) ([]metrics.Bar, error) {
+// klines fetches candles of an instrument and brings prices to one coin. size
+// is "1m", "1h" or "1d".
+func (s *Service) klines(ctx context.Context, in Instrument, size string, limit int) ([]metrics.Bar, error) {
 	var bars []metrics.Bar
 	var err error
-	switch {
-	case in.Venue == Bybit && hourly:
-		bars, err = s.bb.Klines(ctx, in.Symbol, "60", limit)
-	case in.Venue == Bybit:
-		bars, err = s.bb.Klines(ctx, in.Symbol, "D", limit)
-	case hourly:
-		bars, err = s.bn.Klines(ctx, in.Symbol, "1h", limit)
-	default:
-		bars, err = s.bn.Klines(ctx, in.Symbol, "1d", limit)
+	if in.Venue == Bybit {
+		bars, err = s.bb.Klines(ctx, in.Symbol, map[string]string{"1m": "1", "1h": "60", "1d": "D"}[size], limit)
+	} else {
+		bars, err = s.bn.Klines(ctx, in.Symbol, size, limit)
 	}
 	if err != nil {
 		return nil, err

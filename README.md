@@ -48,6 +48,7 @@ Poll loops (all per IP limits from the OKX docs, kept at ~90 %):
 | `funding` | `public/funding-rate?instId=ANY` | 60 s | safety net |
 | `universe` | `public/instruments` | 10 min | adds listings, drops suspended |
 | `hourly` | `market/candles bar=1H` | sweep every 2 min | 300 bars on first visit, then last 3 |
+| `minute` | `market/candles bar=1m` | sweep every 2 min | 300 bars (five hours) on first visit, then every bar since the last one; the 1 h and 4 h windows of `chg`, `vsBtc` and `volx` are measured on them; kept in memory only |
 | `daily` | `market/candles bar=1Dutc` | sweep every 15 min | 230 bars first (MA 200), then last 3 |
 | `books` | `market/books sz=400`, `books-full sz=5000` when 400 levels stop short of ±1 % | continuous sweep, ≥ 30 s | depth bands ±0.1 / 0.5 / 1 %, spread, imbalance; a band beyond the snapshot is `null` |
 | `meta` | CoinGecko `coins/markets` (top 2000 by cap, then the categories of a fixed sector taxonomy) | caps every 30 min, sectors every 24 h; one call per 13 s without a key | `mcap`, `fdv`, `mcapRank`, `sector`, `name` for crypto rows; the asset `class` itself comes from the venue's `instCategory` (crypto / stock / commodity / pre-market) |
@@ -63,7 +64,7 @@ Binance and Bybit (`internal/venue`, public WebSocket streams and REST, no keys)
 | `binance.premium` | `premiumIndex` (all symbols, weight 10) | 60 s while the stream is healthy, 30 s without it | REST safety net for mark price and funding rate |
 | `binance.oi` | `openInterest?symbol=` | continuous, 4 requests / s, busiest first | open interest; there is no bulk endpoint, a pass takes a little over 3 min |
 | `bybit.tickers` | `tickers?category=linear` | 60 s while the stream is healthy, 5 s without it | REST safety net for the same figures |
-| `candles` | Bybit `kline`, else Binance `klines` | 200 hourly and 240 daily bars once, then the last few every 10 / 30 min and right after each hour and UTC day turns | price metrics of the assets OKX does not list |
+| `candles` | Bybit `kline`, else Binance `klines` | 200 hourly and 240 daily bars once, then the last few every 10 / 30 min and right after each hour and UTC day turns; 300 one-minute bars once, then the fresh ones every 2 min | price metrics of the assets OKX does not list |
 
 A stream counts as healthy while its sockets are up and spoke within the last 5 s; a stream that went quiet hands
 the feed back to REST until it returns. Sockets reconnect by themselves with a backoff of 1 to 30 s. Bybit caps

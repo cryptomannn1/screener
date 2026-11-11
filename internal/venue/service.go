@@ -23,6 +23,7 @@ type Config struct {
 	UniverseEvery time.Duration // instrument lists; default 30 min
 	HourlyEvery   time.Duration // refresh of the hourly candles of assets OKX does not list; default 10 min
 	DailyEvery    time.Duration // refresh of their daily candles; default 30 min
+	MinuteEvery   time.Duration // refresh of their one-minute candles, the base of the 1 h and 4 h windows; default 2 min
 	BinancePerSec int           // per-symbol Binance requests per second (open interest, candles); default 4
 	BybitPerSec   int           // Bybit requests per second; default 8
 
@@ -44,6 +45,7 @@ func (c Config) withDefaults() Config {
 	def(&c.UniverseEvery, 30*time.Minute)
 	def(&c.HourlyEvery, 10*time.Minute)
 	def(&c.DailyEvery, 30*time.Minute)
+	def(&c.MinuteEvery, 2*time.Minute)
 	def(&c.ReconcileEvery, time.Minute)
 	if c.BinanceWS == "" {
 		c.BinanceWS = BinanceWSURL
@@ -135,6 +137,7 @@ type Health struct {
 	Assets      int                     `json:"assets"`
 	OutsideOKX  int                     `json:"outsideOkx"` // assets OKX does not list
 	Candles     int                     `json:"candles"`    // of them, with hourly and daily candles loaded
+	Minutes     int                     `json:"minutes"`    // of them, with an hour of one-minute candles loaded
 	BinanceOI   int                     `json:"binanceOi"`  // Binance symbols with an open-interest reading
 	Loops       map[string]LoopHealth   `json:"loops"`
 	Streams     map[string]StreamHealth `json:"streams,omitempty"` // bn, bb; absent when the streams are off
@@ -153,6 +156,8 @@ type series struct {
 	daily    []metrics.Bar
 	hourlyAt time.Time
 	dailyAt  time.Time
+	minute   []metrics.Bar // one-minute bars: the 1 h and 4 h windows are measured on them
+	minuteAt time.Time
 	ret      []float64 // hourly log returns, oldest first
 }
 
@@ -477,6 +482,9 @@ func (s *Service) Health() Health {
 	for k, se := range s.series {
 		if k != benchKey && len(se.hourly) > 0 && len(se.daily) > 0 {
 			h.Candles++
+		}
+		if k != benchKey && len(se.minute) > 60 {
+			h.Minutes++
 		}
 	}
 	h.BinanceOI = len(s.bnOI)

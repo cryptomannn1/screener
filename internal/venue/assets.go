@@ -282,11 +282,11 @@ func candleMetrics(se, bench *series, last, benchLast, vol24 float64, now time.T
 	}
 	for _, p := range []string{"1h", "4h"} {
 		h := collector.PeriodHours[p]
-		chg := metrics.Change(last, se.hourly, h)
+		chg := metrics.ChangeHours(last, se.minute, se.hourly, now, h)
 		m.Chg[p] = f(chg)
-		m.VolX[p] = f(metrics.VolVsPeriod(se.hourly, h, 168))
+		m.VolX[p] = f(metrics.VolVsHours(se.minute, se.minuteAt, se.hourly, se.hourlyAt, h, 168))
 		if bench != nil {
-			m.VsBtc[p] = f(chg - metrics.Change(benchLast, bench.hourly, h))
+			m.VsBtc[p] = f(chg - metrics.ChangeHours(benchLast, bench.minute, bench.hourly, now, h))
 		}
 	}
 	if n := len(se.hourly); n > 1 {
@@ -304,10 +304,10 @@ func candleMetrics(se, bench *series, last, benchLast, vol24 float64, now time.T
 		st := metrics.StrengthVs(se.ret, bench.ret)
 		m.Beta, m.Corr = f(st.Beta), f(st.Corr)
 	}
-	m.Chg7d = f(metrics.Change(last, se.daily, 7))
-	m.Chg30d = f(metrics.Change(last, se.daily, 30))
+	m.Chg7d = f(metrics.ChangeDays(last, se.hourly, se.daily, now, 7))
+	m.Chg30d = f(metrics.ChangeDays(last, se.hourly, se.daily, now, 30))
 	m.VolX7 = f(metrics.VolVsDays(vol24, se.daily, 7))
-	m.Regime = f(metrics.VolRegime(se.daily, 20))
+	m.Regime = f(metrics.VolRegime(se.hourly, se.daily, 20))
 	day, week, month := metrics.PeriodStarts(now)
 	m.Lv = map[string]f{
 		"do": f(metrics.OpenAt(se.daily, day)), "wo": f(metrics.OpenAt(se.daily, week)), "mo": f(metrics.OpenAt(se.daily, month)),

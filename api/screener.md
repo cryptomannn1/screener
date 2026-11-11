@@ -1,4 +1,4 @@
-# screener wire contract — v0.5
+# screener wire contract — v0.6
 
 Plain HTTP GET on `-addr` (default `:8090`), JSON, `Access-Control-Allow-Origin: *`,
 `OPTIONS` answers 204. Timestamps are Unix milliseconds. Prices in the quote
@@ -57,12 +57,12 @@ keyed by `periods`.
 | `volMcap`, `oiMcap` | `vol24 / mcap`, `oi / mcap` |
 | `last`, `mark`, `index`, `bid`, `ask` | prices |
 | `basis` | `mark / index − 1` |
-| `chg` | `{"1h","4h","24h"}`: `last / close N hours ago − 1` (1H candles) |
-| `chgRoll` | `last / open24h − 1`: the venue's own rolling 24 h change, the figure its ticker shows; `chg["24h"]` is measured from an hourly close and can differ by the move inside that hour (v0.5) |
-| `chg1d`, `chg7d`, `chg30d` | vs the UTC daily close 1 / 7 / 30 days ago |
+| `chg` | `{"1h","4h","24h"}`: `last / price N hours ago − 1`, a rolling window that always spans the whole period. For `1h` and `4h` the price N hours ago is read off the one-minute candle that covers that moment; for `24h` off the 1H candle, as a straight line from its open to its close (the same stands in for `1h` / `4h` in the first minutes after a start, until the one-minute candles are loaded). Before v0.6 the reference was the close of an hourly candle, so `1h` covered only the minutes since the hour began |
+| `chgRoll` | `last / open24h − 1`: the venue's own rolling 24 h change, the figure its ticker shows; `chg["24h"]` is the service's own estimate off hourly candles and can differ from it slightly (v0.5) |
+| `chg1d`, `chg7d`, `chg30d` | `chg1d`: vs yesterday's UTC daily close, the change of the current day. `chg7d`: rolling 7 × 24 h off the hourly candles (v0.6; from the daily close 7 days ago while fewer than 169 hourly candles are loaded). `chg30d`: vs the UTC daily close 30 days ago |
 | `vol24` | 24 h quote volume (`volCcy24h × last`) |
 | `volx7` | `vol24 / average quote volume of the last 7 full UTC days` |
-| `volx` | per period: volume of the last N hours / its 7-day average for the same window |
+| `volx` | per period: volume of the last N hours / the average N-hour volume of the 168 complete hours before them. The window is rolling. `1h` and `4h` are summed off one-minute candles and end when those were last read (about every 2 min); `24h` is summed off hourly candles, the one the window begins in counted by the share inside it. Before v0.6 only the forming candle and the complete ones counted, so `1h` read near zero right after an hour began |
 | `oi` | open interest, USD |
 | `oiD` | per period: `oi / oi N hours ago − 1`; history is the service's own minute snapshots, seeded at start from the venue's hourly OI history and from the store |
 | `oiVol` | `oi / vol24` |
@@ -71,7 +71,7 @@ keyed by `periods`.
 | `fundingInterval` | hours between settlements |
 | `atr` | ATR(14) on 1H bars / `last` |
 | `rv24` | annualised std of the last 24 hourly log returns |
-| `regime` | today's true range / median daily true range of the last 20 days (`< 0.6` squeeze, `> 1.6` expansion) |
+| `regime` | true range of the last 24 hours (hourly candles) / median daily true range of the last 20 days (`< 0.6` squeeze, `> 1.6` expansion). Before v0.6 the numerator was the forming UTC day, which has no range yet right after midnight |
 | `range1d` | today's `(high − low) / low` |
 | `toHigh`, `toLow` | `last / 30-day high − 1`, `last / 30-day low − 1` |
 | `vsBtc` | per period: `chg − chg(benchmark)` |
@@ -211,6 +211,7 @@ and `settleCcy` in `-settle` (default `USDT,USDC`), with `ctVal`, `tickSz`,
     "instruments": {"okx": 528, "bn": 794, "bb": 890},   // okx: assets on OKX; bn, bb: linear perpetuals
     "assets": 931, "outsideOkx": 403,
     "candles": 403,                    // assets outside OKX with hourly and daily candles loaded
+    "minutes": 403,                    // of them, with an hour of one-minute candles loaded (v0.6)
     "binanceOi": 794,                  // Binance symbols with an open-interest reading
     "loops": {"universe": {…}, "binance.tickers": {…}, "binance.premium": {…}, "binance.oi": {…}, "bybit.tickers": {…}, "candles": {…}},
     "streams": {                       // absent with -venue-streams=false

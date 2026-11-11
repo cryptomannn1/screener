@@ -27,6 +27,8 @@ type Config struct {
 	UniverseEvery   time.Duration // instruments, default 10m
 	HourlyEvery     time.Duration // refresh pass of 1H candles, default 2m
 	DailyEvery      time.Duration // refresh pass of 1Dutc candles, default 15m
+	MinuteEvery     time.Duration // refresh pass of 1m candles (the base of the 1 h and 4 h windows), default 2m
+	MinuteBackfill  int           // one-minute bars kept, default 300 (five hours)
 	BooksEvery      time.Duration // minimum period of one books sweep, default 30s
 	HourlyBackfill  int           // bars on first load, default 300
 	DailyBackfill   int           // bars on first load, default 40
@@ -58,6 +60,10 @@ func (c Config) withDefaults() Config {
 	def(&c.UniverseEvery, 10*time.Minute)
 	def(&c.HourlyEvery, 2*time.Minute)
 	def(&c.DailyEvery, 15*time.Minute)
+	def(&c.MinuteEvery, 2*time.Minute)
+	if c.MinuteBackfill <= 0 {
+		c.MinuteBackfill = 300
+	}
 	def(&c.BooksEvery, 30*time.Second)
 	def(&c.OIKeep, 26*time.Hour)
 	if c.HourlyBackfill <= 0 {
@@ -119,6 +125,8 @@ type state struct {
 	hourly            []metrics.Bar // newest first
 	daily             []metrics.Bar // newest first
 	hourlyAt, dailyAt time.Time
+	minute            []metrics.Bar // one-minute bars, newest first: the 1 h and 4 h windows are measured on them
+	minuteAt          time.Time
 	oiHist            []oiPoint // oldest first
 	depth             metrics.Depth
 	depthAt           time.Time
@@ -325,6 +333,7 @@ func (c *Collector) Run(ctx context.Context) error {
 	})
 	run("hourly", c.cfg.HourlyEvery, func(ctx context.Context) error { return c.sweepCandles(ctx, "1H") })
 	run("daily", c.cfg.DailyEvery, func(ctx context.Context) error { return c.sweepCandles(ctx, "1Dutc") })
+	run("minute", c.cfg.MinuteEvery, func(ctx context.Context) error { return c.sweepCandles(ctx, "1m") })
 	run("books", c.cfg.BooksEvery, c.sweepBooks)
 	wg.Wait()
 	return ctx.Err()
@@ -675,17 +684,22 @@ func sweep(ctx context.Context, ids []string, fn func(context.Context, string) e
 
 // sweepCandles refreshes one bar size for every instrument: a backfill on the
 // first visit, then the last 3 bars (forming + 2 closed, so a bar closed while
-// we were away is still caught).
+// we were away is still caught). One-minute bars take every bar since the
+// last visit, so the series has no holes; they are not sent to the store.
 func (c *Collector) sweepCandles(ctx context.Context, bar string) error {
 	ids := c.universeIDs()
 	n, err := sweep(ctx, ids, func(ctx context.Context, id string) error {
 		c.mu.RLock()
 		st := c.states[id]
 		var have int
+		var readAt time.Time
 		if st != nil {
-			if bar == "1H" {
+			switch bar {
+			case "1H":
 				have = len(st.hourly)
-			} else {
+			case "1m":
+				have, readAt = len(st.minute), st.minuteAt
+			default:
 				have = len(st.daily)
 			}
 		}
@@ -697,11 +711,17 @@ func (c *Collector) sweepCandles(ctx context.Context, bar string) error {
 		// listing) is fetched in full: one request either way, only more
 		// bytes. A complete series needs just the forming bar and two closed.
 		backfill := c.cfg.HourlyBackfill
-		if bar != "1H" {
+		switch bar {
+		case "1m":
+			backfill = c.cfg.MinuteBackfill
+		case "1Dutc":
 			backfill = c.cfg.DailyBackfill
 		}
 		limit := 3
-		if have < backfill-5 {
+		if bar == "1m" && !readAt.IsZero() {
+			limit = int(time.Since(readAt)/time.Minute) + 3
+		}
+		if have < backfill-5 || limit > backfill {
 			limit = backfill
 		}
 		cs, err := c.cli.Candles(ctx, id, bar, limit)
@@ -709,13 +729,15 @@ func (c *Collector) sweepCandles(ctx context.Context, bar string) error {
 			return err
 		}
 		c.mergeCandles(id, bar, cs)
-		for _, s := range c.sinks {
-			s.OnCandles(id, bar, cs)
+		if bar != "1m" {
+			for _, s := range c.sinks {
+				s.OnCandles(id, bar, cs)
+			}
 		}
 		return nil
 	})
-	name := "hourly"
-	if bar != "1H" {
+	name := map[string]string{"1H": "hourly", "1m": "minute"}[bar]
+	if name == "" {
 		name = "daily"
 	}
 	return c.sweepResult(name, n, len(ids), err)
@@ -750,9 +772,11 @@ func (c *Collector) mergeCandles(id, bar string, cs []okx.Candle) {
 	}
 	series := &st.hourly
 	max := c.cfg.HourlyBackfill
-	if bar != "1H" {
-		series = &st.daily
-		max = c.cfg.DailyBackfill
+	switch bar {
+	case "1m":
+		series, max = &st.minute, c.cfg.MinuteBackfill
+	case "1Dutc":
+		series, max = &st.daily, c.cfg.DailyBackfill
 	}
 	byTS := map[int64]metrics.Bar{}
 	for _, b := range *series {
@@ -770,10 +794,13 @@ func (c *Collector) mergeCandles(id, bar string, cs []okx.Candle) {
 		out = out[:max]
 	}
 	*series = out
-	if bar == "1H" {
+	switch bar {
+	case "1H":
 		st.hourlyAt = time.Now()
 		st.hourlyRet = metrics.LogReturns(out, 168)
-	} else {
+	case "1m":
+		st.minuteAt = time.Now()
+	default:
 		st.dailyAt = time.Now()
 	}
 }
@@ -854,7 +881,7 @@ func (c *Collector) compute(now time.Time) {
 	if bench != nil {
 		bRet = bench.hourlyRet
 		for _, p := range Periods {
-			bChg[p] = metrics.Change(bench.tk.Last, bench.hourly, PeriodHours[p])
+			bChg[p] = metrics.ChangeHours(bench.tk.Last, bench.minute, bench.hourly, now, PeriodHours[p])
 		}
 	}
 	rows := make([]Row, 0, len(c.states))
@@ -1000,9 +1027,11 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 	r.Cov.Hourly = len(st.hourly) >= 26
 	for _, p := range Periods {
 		h := PeriodHours[p]
-		chg := metrics.Change(last, st.hourly, h)
+		// Rolling windows: the whole period, not the time since an hourly close. 1 h and 4 h are measured on the
+		// one-minute bars, 24 h on the hourly ones.
+		chg := metrics.ChangeHours(last, st.minute, st.hourly, now, h)
 		r.Chg[p] = F(chg)
-		r.VolX[p] = F(metrics.VolVsPeriod(st.hourly, h, 168))
+		r.VolX[p] = F(metrics.VolVsHours(st.minute, st.minuteAt, st.hourly, st.hourlyAt, h, 168))
 		if b, ok := bChg[p]; ok && !math.IsNaN(chg) && !math.IsNaN(b) {
 			r.VsBtc[p] = F(chg - b)
 		} else {
@@ -1030,10 +1059,10 @@ func (c *Collector) buildRow(st *state, now time.Time, bRet []float64, bChg map[
 	// Daily block
 	r.Cov.Daily = len(st.daily) >= 8
 	r.Chg1d = F(metrics.Change(last, st.daily, 1))
-	r.Chg7d = F(metrics.Change(last, st.daily, 7))
-	r.Chg30d = F(metrics.Change(last, st.daily, 30))
+	r.Chg7d = F(metrics.ChangeDays(last, st.hourly, st.daily, now, 7))
+	r.Chg30d = F(metrics.ChangeDays(last, st.hourly, st.daily, now, 30))
 	r.VolX7 = F(metrics.VolVsDays(vol24, st.daily, 7))
-	r.Regime = F(metrics.VolRegime(st.daily, 20))
+	r.Regime = F(metrics.VolRegime(st.hourly, st.daily, 20))
 	r.Range1d = F(metrics.RangeToday(st.daily))
 	r.ToHigh = F(metrics.DistanceToHigh(last, st.daily, 30))
 	r.ToLow = F(metrics.DistanceToLow(last, st.daily, 30))

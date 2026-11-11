@@ -313,7 +313,7 @@ const COL = {
   mcap: usdCol('Mcap', r => r.mcap, [['>=', 1e9], ['<=', 3e8]], 'Market capitalisation in USD, crypto only'),
   mcapRank: { label: 'Rank', end: true, val: r => r.mcapRank, fmt: r => ok(r.mcapRank) ? '#' + r.mcapRank : NA },
   atr: pctCol('ATR %', r => r.atr, { signed: false }),
-  regime: xCol('Vol regime', r => r.regime, [['<=', 0.7], ['>=', 1.6]], "Today's range against its 20-day norm"),
+  regime: xCol('Vol regime', r => r.regime, [['<=', 0.7], ['>=', 1.6]], "Range of the last 24 hours against its 20-day norm"),
   taker1h: pctCol('Taker buy 1h', per('takerBuy', '1h'), { d: 0, signed: false, q: [['>=', 0.6], ['<=', 0.4]] }), taker4h: pctCol('Taker buy 4h', per('takerBuy', '4h'), { d: 0, signed: false, q: [['>=', 0.6], ['<=', 0.4]] }), taker24h: pctCol('Taker buy 24h', per('takerBuy', '24h'), { d: 0, signed: false, q: [['>=', 0.6], ['<=', 0.4]] }),
   delta1h: pctCol('Delta 1h', per('delta', '1h'), { d: 1, q: [['>=', 0.1], ['<=', -0.1]] }), delta4h: pctCol('Delta 4h', per('delta', '4h'), { d: 1, q: [['>=', 0.1], ['<=', -0.1]] }), delta24h: pctCol('Delta 24h', per('delta', '24h'), { d: 1, q: [['>=', 0.1], ['<=', -0.1]] }),
   tape: { label: 'Tape /min', end: true, val: r => r.tape, fmt: r => ok(r.tape) ? r.tape.toFixed(0) : NA },
@@ -357,7 +357,7 @@ const CATALOG = [
   ] },
   { g: 'Volatility', items: [
     { name: 'ATR', desc: 'Typical hourly move as a share of price', keys: [['atr', '']] },
-    { name: 'Volatility regime', desc: "Today's range against its norm: below 0.7 is a squeeze", keys: [['regime', '']] },
+    { name: 'Volatility regime', desc: "Range of the last 24 hours against its norm: below 0.7 is a squeeze", keys: [['regime', '']] },
   ] },
   { g: 'Flow', items: [
     { name: 'Taker buy share', desc: 'Share of volume bought at market', keys: P3('taker') },
