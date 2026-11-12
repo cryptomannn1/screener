@@ -4,22 +4,8 @@
       <span class="lab__title">Screener widget sandbox</span>
       <span class="lab__spacer" />
       <div class="lab__seg" role="group" aria-label="Data source">
-        <button
-          type="button"
-          :aria-pressed="sourceKind === 'server'"
-          :title="`Rows from ${serverUrl}`"
-          @click="sourceKind = 'server'"
-        >
-          Server
-        </button>
-        <button
-          type="button"
-          :aria-pressed="sourceKind === 'mock'"
-          title="Deterministic synthetic rows, every column filled"
-          @click="sourceKind = 'mock'"
-        >
-          Mock
-        </button>
+        <button type="button" :aria-pressed="sourceKind === 'server'" :title="`Live assets from ${serverUrl}`" @click="sourceKind = 'server'">Server</button>
+        <button type="button" :aria-pressed="sourceKind === 'static'" title="The snapshot built into the prototype, no service needed" @click="sourceKind = 'static'">Snapshot</button>
       </div>
       <button type="button" class="scr-btn -ghost -icon" title="Toggle theme" @click="toggleTheme">
         <ScreenerIcon name="theme" />
@@ -31,24 +17,14 @@
       <div class="frame__header">
         <span class="frame__grip"><ScreenerIcon name="grip" /></span>
         <span class="frame__title">Screener</span>
-        <span class="frame__symbol" title="Linked instrument group follows the selected row">
-          <i />{{ selectedBase }} <small>{{ selectedRest }}</small>
-        </span>
+        <span class="frame__symbol" title="Linked instrument group follows the selected row"><i />{{ symbol }}</span>
         <div class="frame__actions">
           <button type="button" class="scr-btn -ghost -icon" title="Widget settings"><ScreenerIcon name="gear" /></button>
           <button type="button" class="scr-btn -ghost -icon" title="Maximize"><ScreenerIcon name="maximize" /></button>
         </div>
       </div>
       <div class="frame__body">
-        <ScreenerWidget
-          :source="source"
-          :settings="settings"
-          :instrument-id="selected"
-          @update:settings="patchSettings"
-          @select="onSelect"
-          @trade="toast(`Order form opened for ${$event}`)"
-          @notify="toast"
-        />
+        <ScreenerWidget :source="source" :settings="settings" :symbol="symbol" @update:settings="patchSettings" @select="onSelect" />
       </div>
     </section>
 
@@ -62,11 +38,12 @@ import { computed, ref, watch } from 'vue'
 import ScreenerIcon from '../../src/components/ScreenerIcon.vue'
 import ScreenerWidget from '../../src/ScreenerWidget.vue'
 
-const STORAGE_KEY = 'screener-sandbox'
+// v2: the settings shape changed with the three-exchange widget.
+const STORAGE_KEY = 'screener-sandbox-v2'
 const query = new URLSearchParams(window.location.search)
 
 /**
- * Where the rows come from: `?server=http://host:port` wins; a page the Go
+ * Where the assets come from: `?server=http://host:port` wins; a page the Go
  * service serves itself (under /ui/) talks to its own origin; the Vite dev
  * server talks to the service on its default port.
  */
@@ -91,29 +68,28 @@ const serverUrl = resolveServerUrl()
 const sourceKind = ref(stored.sourceKind ?? 'server')
 const theme = ref(stored.theme ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'))
 const settings = ref(stored.settings ?? {})
-const selected = ref(stored.selected ?? 'BTC-USDT-SWAP')
+const symbol = ref(stored.symbol ?? 'BTC')
 
+// The snapshot is the one the HTML prototype carries; loaded only when asked for.
+const loadSnapshot = () => import('../../../prototype/src/proto2-snapshot.json')
 const source = computed(() =>
   sourceKind.value === 'server'
     ? { kind: 'server', baseUrl: serverUrl, pollMs: 5000, sse: query.get('sse') !== '0' }
-    : { kind: 'mock', pollMs: 5000 },
+    : { kind: 'static', load: loadSnapshot },
 )
-const selectedBase = computed(() => selected.value.split('-')[0])
-const selectedRest = computed(() => selected.value.split('-').slice(1).join(' '))
 
 watch(
-  [sourceKind, theme, settings, selected],
+  [sourceKind, theme, settings, symbol],
   () => {
     document.documentElement.dataset.theme = theme.value
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        sourceKind: sourceKind.value,
-        theme: theme.value,
-        settings: settings.value,
-        selected: selected.value,
-      }),
-    )
+    try {
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ sourceKind: sourceKind.value, theme: theme.value, settings: settings.value, symbol: symbol.value }),
+      )
+    } catch {
+      // storage may be blocked; the sandbox works without it
+    }
   },
   { immediate: true, deep: true },
 )
@@ -123,9 +99,9 @@ function patchSettings(partial) {
   settings.value = { ...settings.value, ...partial }
 }
 
-function onSelect(instId) {
-  selected.value = instId
-  toast(`Chart, order book and order form switched to ${instId}`)
+function onSelect(asset) {
+  symbol.value = asset.symbol
+  toast(`Chart, order book and order form switched to ${asset.symbol}`)
 }
 
 function toggleTheme() {

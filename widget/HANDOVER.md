@@ -4,8 +4,10 @@
 
 `screener/widget/` is a self-contained Vue 3 widget (plain JS, `<script setup>`,
 no runtime dependency besides Vue) that renders the market screener fed by the
-Go service in this repository (`GET /screener`, contract: `../api/screener.md`).
-It was built from the first HTML prototype (`../prototype/src/screener-v1.html`)
+Go service in this repository: one table of perpetual contracts over OKX,
+Binance and Bybit (`GET /assets` and `GET /stream?view=assets`, contract:
+`../api/screener.md`). It is a port of the HTML prototype
+(`../prototype/screener-v2.html`, source `../prototype/src/proto2-template.html`)
 and follows terminal-front's table conventions and design tokens, so that it can
 be dropped into `terminal-front` as a widget type.
 
@@ -14,31 +16,50 @@ widget/
 ├── HANDOVER.md, README.md
 ├── src/
 │   ├── ScreenerWidget.vue        the widget: props, events, wiring
-│   ├── columns.js                column catalogue (keys = contract fields, titles, units)
-│   ├── format.js                 cell formatting, filter value parse / format
-│   ├── presets.js                built-in presets and quick filters
+│   ├── columns.js                column catalogue: value, cell, unit, quick thresholds; the Columns catalogue
+│   ├── tabs.js                   ready tables (Overview, Anomalies, Strong vs BTC, Weak vs BTC), view normalisation
+│   ├── filters.js                conditions, search, order, how a threshold is typed and shown
+│   ├── format.js                 number formatting
 │   ├── screener.css              shared primitives (`scr-btn`, `scr-input`, `scr-icon`)
+│   ├── model/
+│   │   ├── aggregate.js          one row per asset over the chosen exchanges
+│   │   ├── levels.js             price against a level, recent crosses
+│   │   └── constants.js          exchanges, classes, levels, operators
 │   ├── api/
-│   │   ├── serverSource.js       GET /screener polling, optional SSE /stream
-│   │   ├── mockSource.js         deterministic synthetic rows, every field filled
+│   │   ├── assetsSource.js       GET /assets, SSE /stream?view=assets, polling as the fallback
+│   │   ├── staticSource.js       a fixed payload, for a sandbox or a test
 │   │   └── index.js              createSource(config)
 │   ├── composables/
-│   │   ├── useScreenerData.js    runs the source: rows, meta, status
-│   │   ├── useScreenerSettings.js  persisted state ↔ `settings` / `update:settings`
-│   │   ├── useScreenerRows.js    search, filters, preset, sort, preset counts
-│   │   └── usePopover.js         one popover at a time
+│   │   ├── useAssets.js          runs the source: assets, ts, tick, status
+│   │   ├── useScreenerState.js   persisted state ↔ `settings` / `update:settings`
+│   │   ├── usePopover.js         one popover at a time, anchored by `data-pop` / `data-key`
+│   │   └── useDragReorder.js     drag to reorder (header cells, the Columns list)
 │   └── components/
-│       ├── ScreenerToolbar.vue   presets, search, period switch, Filters / Columns
-│       ├── FilterStrip.vue       filter chips, sort in words, save as preset
-│       ├── ScreenerTable.vue     sticky header, pinned Symbol / actions, sort, rows
-│       ├── ScreenerCell.vue      one formatted metric (text, badge, bar, dash)
-│       ├── Sparkline.vue         24 hourly closes
-│       ├── StatusLine.vue        Instruments, Shown, Updated, coverage
+│       ├── ScreenerTabs.vue      the tabs with live counts
+│       ├── ScreenerBar.vue       search, Exchanges, Assets, conditions as phrases, Add filter, Columns
+│       ├── ScreenerTable.vue     adaptive widths, sticky header, pinned Symbol, sort, hover card
+│       ├── PriceCell.vue         the price as a running figure
+│       ├── VenueIcon.vue         exchange marks
 │       ├── PopoverSurface.vue    fixed-position dropdown surface (Teleport to body)
-│       ├── FiltersPopover.vue, ColumnsPopover.vue, RowMenu.vue
+│       ├── OptionList.vue, AddFilterMenu.vue, ValueEditor.vue, ColumnsPanel.vue
 │       └── ScreenerIcon.vue      the few inline glyphs
 └── sandbox/                      Vite app on port 5190, see README.md
 ```
+
+## Data model
+
+The service sends one entry per asset with a block per exchange (`v.okx`,
+`v.bn`, `v.bb`: price, 24h change, volume, open interest, funding) and the
+metrics computed once per asset (`m`). Which exchanges go into a row is the
+user's choice, so the widget adds the blocks up itself (`model/aggregate.js`):
+
+- volume and open interest are sums over the chosen exchanges;
+- price and the 24h change come from the busiest of them;
+- funding is brought to 8 hours on every exchange and weighted by open interest;
+- strength against BTC over 24h uses the same exchange choice.
+
+A hover on Price, Chg 24h, Vol 24h, OI or Funding shows the figure on each
+exchange that went into the cell.
 
 ## Mounting it in terminal-front
 
@@ -70,88 +91,93 @@ host component that reads `useWidget`:
   <ScreenerWidget
     :source="source"
     :settings="settings"
-    :instrument-id="market.instrumentId"
+    :symbol="baseTicker"
     @update:settings="setSettings"
-    @select="setInstrument"
-    @trade="openOrderForm"
+    @select="onSelect"
   />
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import ScreenerWidget from './ScreenerWidget.vue'
 import { useWidget } from '@/composables/useWidget'
 
 const props = defineProps({ widgetId: { type: String, required: true } })
 const { settings, setSettings, market, setInstrument } = useWidget(() => props.widgetId)
-const source = { kind: 'server', baseUrl: import.meta.env.VITE_SCREENER_URL, pollMs: 5000 }
-function openOrderForm(instId) { setInstrument(instId) /* then focus the order form [?] */ }
+const source = { kind: 'server', baseUrl: import.meta.env.VITE_SCREENER_URL }
+const baseTicker = computed(() => market.value.instrumentId?.split('-')[0] ?? '')   // [?] via the instruments store
+function onSelect(asset) { /* map asset.symbol + asset.primary to a terminal instrument id, then setInstrument(id) [?] */ }
 </script>
 ```
 
-- **`select` → link group.** `setInstrument(instId)` from `useWidget` calls
-  `instrumentSwitch.switchInstrument(widgetId, instId)`, which moves the whole
-  colour group when the widget is linked (`settings.linkGroup`) and only this
-  widget otherwise — exactly the "click a row switches chart, order book and
-  order form" behaviour from the prototype. Instrument ids are OKX
-  `BTC-USDT-SWAP`; terminal instrument ids may need a mapping through the
-  instruments store [?].
-- **Settings persistence.** The widget keeps all its state in one flat object
-  (`period`, `preset`, `filters`, `sort`, `columns`, `watchlist`,
-  `customPresets`, `selected`) and emits `update:settings` with the changed
-  keys; `setSettings(partial)` from `useWidget` is the matching writer. Other
-  keys the terminal stores in `widget.settings` (`linkGroup`) are left alone.
-  Note `workspace.setWidgetSettings` is a user edit, so it syncs to the account.
-- **Highlighted row.** `instrumentId` (the frame's `market.instrumentId`)
+- **`select`.** A row click emits
+  `{ key, symbol, name, cls, primary, venues }`: the asset key of the service
+  (`c:BTC`), its ticker, the busiest of the chosen exchanges (`okx` | `bn` |
+  `bb`) and all exchanges it trades on. The payload carries no exchange
+  instrument id: `/assets` does not send one, so the host maps ticker and
+  exchange to its own instrument through the instruments store [?].
+  `setInstrument` then moves the link group as for any other widget.
+- **Highlighted row.** `symbol` (the ticker of the frame's instrument)
   highlights that row; without it the widget falls back to its own `selected`.
-- **`trade`.** Emitted from the row menu's "Trade" after `select`; the terminal
-  decides what "opens order form" means [?].
-- **`notify`.** Short messages ("Copied BTC-USDT-SWAP"); route to `useToastNew`.
+- **Settings persistence.** The widget keeps its state in one flat object and
+  emits `update:settings` with the changed keys, at most once per 300 ms;
+  `setSettings(partial)` from `useWidget` is the matching writer. Keys:
+  `exchanges` (`{ okx, bn, bb }`), `cls` (asset class), `tab`, `selected`, and
+  `views` (tab id → columns, order, conditions, sort). `views` holds only the
+  tabs the user changed, so a ready table follows its definition in `tabs.js`
+  until the user makes it their own. Other keys the terminal stores in
+  `widget.settings` (`linkGroup`) are left alone. A settings change that comes
+  from the host (another device, a reset) is applied; the widget's own echo is
+  ignored. Search is not persisted.
 - **Also to touch:** `src/views/design-system/widgetGalleryCatalog.js` if you
   want it in the gallery (`['screener', 1080, 480]`), and the layout presets if
   it should appear in a default workspace.
 
 ### Props
 
-| prop           | type   | default            | meaning |
-|----------------|--------|--------------------|---------|
-| `source`       | Object | `{ kind: 'mock' }` | `{ kind: 'server', baseUrl, pollMs = 5000, sse = false }`, `{ kind: 'mock', pollMs, seed }`, or any object with `start(onRows, onError)` / `stop()` |
-| `settings`     | Object | `{}`               | persisted state, see above |
-| `instrumentId` | String | `''`               | the host's instrument, highlights the row |
+| prop       | type   | default              | meaning |
+|------------|--------|----------------------|---------|
+| `source`   | Object | `{ kind: 'server' }` | `{ kind: 'server', baseUrl, pollMs = 5000, sse = true }`, `{ kind: 'static', data \| load }`, or any object with `start(onData, onError)` / `stop()` |
+| `settings` | Object | `{}`                 | persisted state, see above |
+| `symbol`   | String | `''`                 | ticker of the host's instrument, highlights the row |
 
-Events: `select(instId)`, `trade(instId)`, `update:settings(partial)`,
-`notify(message)`.
+Events: `select(asset)`, `update:settings(partial)`. Exposed: `resetTab()`,
+`isTabChanged()` for a host that offers its own reset.
 
 ### API base URL
 
-`serverSource.js` fetches `${baseUrl}/screener` (no trailing slash) every
-`pollMs`; with `sse: true` it opens `EventSource(${baseUrl}/stream)` and listens
-to `rows` events, keeping polling as the fallback when the stream errors. The
-service answers with `Access-Control-Allow-Origin: *`. In the terminal the URL
-should come from the environment or `src/api/index.ts` rather than be hardcoded
-[?]; the sandbox defaults to `http://localhost:8090`.
+`assetsSource.js` reads `${baseUrl}/assets` once, then listens to
+`EventSource(${baseUrl}/stream?view=assets)` (events named `assets`, the same
+payload, about once a second). While the stream is down it polls `/assets`
+every `pollMs`; the stream reconnects by itself. The table redraws at most
+four times a second and not at all while the page is hidden. The service
+answers with `Access-Control-Allow-Origin: *`. In the terminal the URL should
+come from the environment or `src/api/index.ts` rather than be hardcoded [?];
+the sandbox defaults to `http://localhost:8090`.
 
 ## Design tokens used
 
 Only token names, read through `var(--…)`; the terminal's `_theme.scss` applies
 as is. Colours: `--text-high-emphasis`, `--text-mid-emphasis`,
 `--text-low-emphasis`, `--text-light`, `--text-error-accent`,
-`--text-attention-accent`, `--icons-mid-emphasis`, `--icons-low-emphasis`,
-`--card-background`, `--card-neutral-background`,
-`--card-primary-background-light`, `--card-error-background-light`, `--border`,
+`--icons-mid-emphasis`, `--icons-low-emphasis`, `--card-background`,
+`--card-neutral-background`, `--card-primary-background-light`, `--border`,
 `--long`, `--short`, `--widget-background`, `--widget-header-background`,
 `--primary-accent`, `--primary-deep`, `--control-focus-border`,
 `--dropdown-background`, `--dropdown-hover`, `--dropdown-border`,
 `--dropdown-shadow`, `--terminal-v2-text`, `--terminal-v2-muted`,
-`--table-pin-shadow`. Layout: `--space-2…32`, `--radius-4/6/8/circle`,
-`--layer-raised`, `--layer-sticky`, `--layer-dropdown`, `--duration-fast`.
+`--table-pin-shadow`. Layout and motion: `--space-2…32`, `--radius-4/6/8/circle`,
+`--layer-raised`, `--layer-sticky`, `--layer-dropdown`, `--layer-tooltip`,
+`--duration-fast`, `--duration-base`, `--ease-standard`.
 
 Typography is `fz-12` (12px/16px, tabular-nums) inherited from the host's font
 (Geist on `body`). Rows are 38px, the header 32px on
 `--widget-header-background`; there are no borders between rows or columns.
 
-Styles are plain scoped CSS (the sandbox has no Sass). When moving into the
-terminal you may convert to SCSS with the `$token` aliases from `_tokens.scss`;
-the names map one to one.
+Styles are plain CSS, scoped where the markup stays inside the widget and
+global (prefixed `scr-` / `screener__`) for what is teleported to `body`. When
+moving into the terminal you may convert to SCSS with the `$token` aliases from
+`_tokens.scss`; the names map one to one.
 
 ### Where the terminal kit should replace local pieces
 
@@ -159,76 +185,64 @@ the names map one to one.
   (teleport target and z-index via `useTeleportTarget` / `WIDGET_SETTINGS_Z_INDEX`).
   The local surface uses `--layer-dropdown` (100), which sits under a
   maximized frame (`--layer-overlay` 500) [?].
-- `ScreenerIcon.vue` (inline SVG) → `IconNew`: search, star, filter, columns,
-  more, close, check, up, down. AGENTS.md forbids inline SVG in the terminal.
-- `.scr-btn` / `.scr-input` → `ButtonNew size="sm"` and the kit input; the
-  period switch and preset tabs follow `PositionsWidget`'s tab styling.
+- `PriceCell.vue` → `AnimatedNumber` with `tone="none"` (the control bar's
+  running figure); the local cell repeats its 200 ms tween and colour flash.
+- `ScreenerIcon.vue`, `VenueIcon.vue` (inline SVG) → `IconNew` and the
+  terminal's exchange icons. AGENTS.md forbids inline SVG in the terminal.
+- `.scr-btn` / `.scr-input` → `ButtonNew size="sm"` and the kit input; the tabs
+  follow `PositionsWidget`'s tab styling.
+- `useDragReorder.js` repeats the pointer pattern of the Positions table
+  (4px threshold, accent source, edge line on the target); use the terminal's
+  own helper if it is shared.
 - `title` attributes on headers, cells and menu items are the tooltips; the
   terminal's `TitleTooltip` picks them up.
 
 ## Behaviour summary
 
-- Toolbar, left to right: search, (preset tabs), spacer, period switch,
-  Filters, Columns.
-- Presets: only "All" ships (the owner removed Movers, Squeeze, Strong vs BTC
-  and the rest for now); the mechanism stays in `presets.js`. The tabs row is
-  drawn only when there is more than one preset, which happens once the user
-  saves a filter set with "Save as preset" (custom presets live in settings,
-  tabs show live counts, search excluded). A saved preset id that no longer
-  exists reads as All.
-- Search accepts several tickers separated by commas (`btc, eth`), matching
-  symbol or instrument id.
-- Period 1h / 4h / 24h; 5m / 15m shown disabled.
-- Sort on numeric headers cycles desc → asc → by size (signed metrics only)
-  → desc; `null` always sorts last.
-- Filters: `>=` / `<=` on any numeric column, percent typed as percent, money
-  with K / M / B. One condition per metric and direction.
-- Row click emits `select`; the row menu offers Show on chart, Trade,
-  watchlist toggle, Set alert (disabled, v2), Copy symbol. Starred rows float
-  to the top of the All preset; there is no Watchlist tab.
-- Status line: Instruments, Shown (with "first 600 drawn" when cut), Updated
-  (the response `ts`; the source name is its tooltip), and coverage as
-  `Candles n/N, daily n/N, books n/N, OI Δ n/N, flow n/N` with fully covered
-  families omitted. `flow` is counted from `cov.flow` per row.
-- States: "Loading instruments" before the first rows, "`<source>` unreachable,
+- **Tabs.** Overview, Anomalies, Strong vs BTC, Weak vs BTC. A tab is its
+  columns, their order, its conditions and its sort; exchanges, asset class
+  and search are shared. The number on a tab is how many assets match its
+  conditions now; a tab without conditions has no number. What is changed in
+  a tab stays in that tab.
+- **Bar**, left to right: search (several tickers or names separated by
+  commas), Exchanges (checklist, one always stays on), Assets (class with
+  counts; a class the chosen exchanges do not list is disabled), the
+  conditions, Add filter, then "N of M", Reset filters and Columns.
+- **Conditions are phrases**: column, operator, value, remove. Number columns
+  read "above / below / between" with a typed value (`20m`, `1.5b`, `3` for
+  percent) or a one-click usual threshold; the table answers while the value
+  is typed. Level columns read "above / near / below / crossed ↑ / crossed ↓"
+  with the range of "near" as a second part. Sector reads "is". Add filter
+  offers the columns of the table that have no condition yet; a phrase left
+  without a value goes away when its popover closes. Reset filters returns the
+  conditions the tab came with.
+- **Columns** popover: the table's columns on the left (drag to reorder, cross
+  to remove), the catalogue on the right (metric families with a one-line
+  description, periods as chips). Removing a column removes its condition and
+  its sort. Reset returns the tab as it ships. Header cells reorder by
+  dragging too.
+- **Widths.** Symbol and text columns keep their width; number columns share
+  the free width equally. A few columns fill the widget, more columns narrow
+  down to their minimum, and only then the table scrolls sideways with Symbol
+  pinned.
+- **Sort.** A header click: descending, ascending, back to the default order
+  (text columns start ascending). The default order is by 24h volume, or by
+  distance when a "near" condition is set, or by the latest cross.
+  Empty values always go last.
+- **Price** runs to its new value on a live tick and flashes the side's colour;
+  a redraw the user caused never flashes.
+- States: "Loading assets" before the first payload, "`<host>` unreachable,
   retrying" when the fetch fails with nothing shown yet (error text in the
-  tooltip), "No instruments match the filters" inside the table.
+  tooltip), "Nothing matches" inside the table.
 
-## Contract notes (server vs prototype)
+## What is not done
 
-Followed the server where the prototype differed: `chg1d` is against the UTC
-daily close, `toHigh` / `toLow` against the 30-day high / low (both as
-`last / level − 1`, so `toHigh` is negative below the high), `atr` is one value
-(ATR 14 on 1H / last), `regime` thresholds 0.6 / 1.6, `rv24` from hourly log
-returns, beta / corr over 168 bars. Extra contract fields exposed as optional
-columns: `last`, `depth1`.
-
-Levels (owner request, 2026-10-31): six row fields `do`, `wo`, `mo`, `ma50`,
-`ma100`, `ma200`, each `{ px, dist }` with `dist = last / px − 1` and `px`
-null when unknown. Column group "Levels" (DO, WO, MO, MA 50, MA 100, MA 200)
-sits between "Strength vs BTC" and "Order book"; cells show `dist` as a signed
-percent, the tooltip shows the level price ("Level 77 450.3"), sorting is by
-`dist`. MA 100 is hidden by default. The widget reads the fields as soon as the
-server sends them; until then they are dashes. A `settings.columns` list saved
-before this change does not include the new defaults — "Reset to default" in
-the Columns popover does.
-
-Observed on the running service (2026-10-31): `spark` is already present;
-`oiD` is `null` everywhere (`oiHist` coverage 0 until the service has run an
-hour); `takerBuy` / `delta` null (phase 2); `fundingNext` null; `presence` /
-`stay` null for the benchmark; `depth1` null for some rows. All render as dashes.
-
-Ambiguities: `coverage` has no `flow` count (derived from rows here); `listed`
-is fractional days (floored for display); `vsBtc` for the benchmark itself is
-`0`, not `null`.
-
-## What is mocked, what is not done
-
-- `mockSource.js` fills every field including phase-2 ones and `spark`.
-- Not done: alerts (menu item disabled), 5m / 15m periods, column reorder and
-  resize, virtual scrolling (the table draws at most 600 rows), keyboard
-  navigation of rows, a settings panel for the frame's gear.
+- Virtual scrolling: the table draws at most 400 rows.
+- Keyboard navigation of rows and of drag reorder.
+- A watchlist, row actions (trade, alert, copy) and a status line: the first
+  version of the widget had them, the current design does not.
+- User-made tabs ("save this table as a tab").
 - Not verified: behaviour inside the real terminal (teleport target, z-index
-  under a maximized frame, instrument id mapping) [?]; SSE against a live
-  `/stream` (endpoint not up yet, the code path is exercised only by its polling
-  fallback) [?].
+  under a maximized frame, mapping of an asset to a terminal instrument) [?].
+- The flow, order-book and OI-change columns are empty for assets OKX does
+  not list; this is a limit of the service, see `../PLAN.md`.

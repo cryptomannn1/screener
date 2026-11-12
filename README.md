@@ -11,8 +11,8 @@ public.
 - UI contract: the prototype in [`prototype/`](prototype/), one HTML page with
   a clean table over the three exchanges, filter phrases and ready tabs.
 - Wire contract: [`api/screener.md`](api/screener.md).
-- Vue widget for the terminal: [`widget/`](widget/). It still follows the
-  previous, single-exchange prototype.
+- Vue widget for the terminal: [`widget/`](widget/), a port of the prototype
+  with a sandbox on :5190 (`make widget`).
 - Where the project stands and what comes next: [`PLAN.md`](PLAN.md) (in Russian).
 
 Quick start: `go run ./cmd/screener -static prototype`, then open
@@ -166,10 +166,10 @@ Next:
 
 `widget/` is the Vue 3 widget for the terminal (Vue only, terminal token
 names, no borders between rows) with a Vite sandbox on :5190 (`make widget`,
-or `cd widget/sandbox && npm run dev`). It reads `/stream` (SSE) and falls
-back to polling `/screener`; `?server=` overrides the base URL, `?sse=0`
-forces polling. `widget/HANDOVER.md` is the mounting guide for the terminal
-team.
+or `cd widget/sandbox && npm run dev`). It shows the three exchanges in one
+table: it reads `/assets`, listens to `/stream?view=assets` (SSE) and falls
+back to polling; `?server=` overrides the base URL, `?sse=0` forces polling.
+`widget/HANDOVER.md` is the mounting guide for the terminal team.
 
 ## Backfill and backtest
 

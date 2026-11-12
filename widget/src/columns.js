@@ -1,598 +1,217 @@
-// The column catalogue. Keys follow the wire contract (`api/screener.md`);
-// per-period metrics (`chg`, `volx`, `oiD`, `vsBtc`, `takerBuy`, `delta`) are
-// read for the period the user picked, so their keys end in `P`.
-//
-// A column with `value` is numeric: sortable and filterable. `unit` tells the
-// filter popover how to parse and show a typed value; `signed` lets the sort
-// cycle offer "by size" (absolute value, descending). `label` may be a function
-// of the context `{ period, benchmark }`.
+// The column catalogue. A column is `{ label, title, end, unit, text, level,
+// quick, width, value(row), cell(row) }`:
+//   value  what the column sorts and filters by; a column without it does neither
+//   cell   what the table draws, see `format.js`
+//   unit   'usd' | 'pct' | 'x' | 'bps', how a condition value is typed and shown
+//   quick  usual thresholds offered as one-click answers: [operator, value, label?]
+//   end    right-aligned number column; these share the free width of the table
+// Rows come from `model/aggregate.js`.
 
-import * as f from './format.js'
+import { fundingCell, isNum, levelCell, multipleCell, pctCell, plainCell, priceText, usdCell, usdText, fundingText } from './format.js'
+import { EXCHANGES, LEVELS, LEVEL_TITLE } from './model/constants.js'
 
-export const GROUPS = [
-  'Instrument',
-  'Price',
-  'Volume',
-  'Open interest',
-  'Capitalisation',
-  'Funding',
-  'Volatility',
-  'Flow',
-  'Strength vs BTC',
-  'Levels',
-  'Order book',
-  'Listing',
-]
+const per = (field, period) => (row) => (row[field] ? row[field][period] : null)
+const MOVE_3 = [['>=', 0.03], ['<=', -0.03]]
+const MOVE_10 = [['>=', 0.1], ['<=', -0.1]]
+const VS_BTC = [['>=', 0.02], ['<=', -0.02]]
+const TAKER = [['>=', 0.6], ['<=', 0.4]]
+const DELTA = [['>=', 0.1], ['<=', -0.1]]
+const BUSY = [['>=', 2], ['>=', 5]]
 
-/** Venue asset classes (`row.class`) as labels. */
-export const CLASS_LABEL = { crypto: 'Crypto', stock: 'Stock', premarket: 'Pre-market', commodity: 'Commodity', other: 'Other' }
-
-const field = (name) => (row) => row[name] ?? null
-const perPeriod = (name) => (row, ctx) => row[name]?.[ctx.period] ?? null
-
-/** A price level `{ px, dist }`: the cell shows the level price and, below it, `dist = last / px − 1`; sorts by dist. */
-const level = (name, label, def, title) => ({
-  key: name,
-  group: 'Levels',
+const pctCol = (label, value, o = {}) => ({
   label,
+  end: true,
   unit: 'pct',
-  signed: true,
-  def,
-  title,
-  value: (row) => row[name]?.dist ?? null,
-  format: (_v, row) => f.level(row[name]),
+  value,
+  cell: (row) => pctCell(value(row), o.digits ?? 2, o.signed !== false),
+  quick: o.quick,
+  title: o.title,
 })
+const usdCol = (label, value, quick, title) => ({ label, end: true, unit: 'usd', value, cell: (row) => usdCell(value(row)), quick, title })
+const xCol = (label, value, quick, title) => ({ label, end: true, unit: 'x', value, cell: (row) => multipleCell(value(row)), quick, title })
+const numCol = (label, value, digits, title) => ({ label, end: true, value, cell: (row) => plainCell(value(row), digits), title })
 
-/** Price and taker flow disagree: price up with net selling (-1), price down with net buying (+1). */
-function divergence(row, ctx) {
-  const change = row.chg?.[ctx.period]
-  const delta = row.delta?.[ctx.period]
-  if (change == null || delta == null) return null
-  if (change > 0.001 && delta < -0.05) return -1
-  if (change < -0.001 && delta > 0.05) return 1
-  return 0
-}
-
-export const COLUMNS = [
-  {
-    key: 'symbol',
-    group: 'Instrument',
-    label: 'Symbol',
-    pin: 'left',
-    def: true,
-    width: 150,
-    title: 'Instrument. Click a row to switch the linked chart, order book and order form.',
-  },
-  {
-    key: 'spark',
-    group: 'Instrument',
-    label: '24h',
-    def: true,
-    title: 'Last 24 hours of hourly closes against the price 24 hours ago: green above it, red below.',
-  },
-  {
-    key: 'sector',
-    group: 'Instrument',
+export const COLUMNS = {
+  symbol: { label: 'Symbol', pin: true, text: true, value: (row) => row.base },
+  sector: {
     label: 'Sector',
-    def: true,
-    title:
-      'Crypto sector from CoinGecko categories, one per coin (Stable, Meme, Exchange, L2, L1, AI, RWA, DePIN, Gaming, Privacy, DeFi, Infra, Other). Stocks, indices, commodities and pre-market contracts show their asset class.',
-    // Text column: drawn as a label, not sortable or filterable in the widget yet.
-    text: (row) => row.sector || (row.class && row.class !== 'crypto' ? CLASS_LABEL[row.class] ?? row.class : null),
-    tone: (row) => (row.sector ? '' : 'mid'),
+    text: true,
+    title: 'Crypto sector, or the kind of instrument for stocks, indices, commodities and FX',
+    value: (row) => row.sector || null,
+    cell: (row) =>
+      row.sector
+        ? { text: row.sector, tone: row.cls === 'crypto' && row.sector !== 'Other' ? '' : 'mid', title: row.name }
+        : null,
   },
-  {
-    key: 'mark',
-    group: 'Price',
-    label: 'Mark',
-    unit: 'price',
-    def: true,
-    title: 'Mark price in USD: the price liquidations and PnL are computed from.',
-    value: field('mark'),
-    format: f.dollarPrice,
-  },
-  {
-    key: 'last',
-    group: 'Price',
-    label: 'Last',
-    unit: 'price',
-    def: false,
-    title: 'Last traded price in USD.',
-    value: field('last'),
-    format: f.dollarPrice,
-  },
-  {
-    key: 'chgP',
-    group: 'Price',
-    label: (ctx) => `Chg ${ctx.period}`,
-    unit: 'pct',
-    signed: true,
-    def: true,
-    title: 'Price change over the selected period, from 1H candles.',
-    value: perPeriod('chg'),
-    format: (v) => f.pct(v),
-  },
-  {
-    key: 'chg1d',
-    group: 'Price',
-    label: 'Chg 1D',
-    unit: 'pct',
-    signed: true,
-    def: true,
-    title: 'Change against the UTC daily close one day ago.',
-    value: field('chg1d'),
-    format: (v) => f.pct(v),
-  },
-  {
-    key: 'chg7d',
-    group: 'Price',
-    label: 'Chg 7D',
-    unit: 'pct',
-    signed: true,
-    def: true,
-    title: 'Change over the last 7 days, a rolling window.',
-    value: field('chg7d'),
-    format: (v) => f.pct(v),
-  },
-  {
-    key: 'chg30d',
-    group: 'Price',
-    label: 'Chg 30D',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: 'Change against the UTC daily close 30 days ago.',
-    value: field('chg30d'),
-    format: (v) => f.pct(v),
-  },
-  {
-    key: 'basis',
-    group: 'Price',
-    label: 'Basis',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: 'Mark against index: premium of the perpetual over spot.',
-    value: field('basis'),
-    format: (v) => f.pct(v, 3),
-  },
-  {
-    key: 'vol24',
-    group: 'Volume',
-    label: 'Vol 24h',
-    unit: 'usd',
-    def: true,
-    title: 'Traded volume over 24 hours in USD.',
-    value: field('vol24'),
-    format: f.usd,
-  },
-  {
-    key: 'volx7',
-    group: 'Volume',
-    label: 'Vol × 7D',
-    unit: 'x',
-    def: true,
-    title:
-      '24h volume divided by the average daily volume of the last 7 full UTC days. Above 1 is busier than usual.',
-    value: field('volx7'),
-    format: f.multiple,
-  },
-  {
-    key: 'volxP',
-    group: 'Volume',
-    label: (ctx) => `Vol × ${ctx.period}`,
-    unit: 'x',
-    def: false,
-    title:
-      'Volume of the last hours of the selected period, a rolling window, against the average of the same window over the previous 7 days.',
-    value: perPeriod('volx'),
-    format: f.multiple,
-  },
-  {
-    key: 'oi',
-    group: 'Open interest',
-    label: 'OI',
-    unit: 'usd',
-    def: true,
-    title: 'Open interest in USD.',
-    value: field('oi'),
-    format: f.usd,
-  },
-  {
-    key: 'mcap',
-    group: 'Capitalisation',
-    label: 'Mcap',
-    unit: 'usd',
-    def: true,
-    title: 'Market capitalisation in USD (crypto only, CoinGecko, refreshed every 30 minutes).',
-    value: field('mcap'),
-    format: f.usd,
-  },
-  {
-    key: 'fdv',
-    group: 'Capitalisation',
-    label: 'FDV',
-    unit: 'usd',
-    def: false,
-    title: 'Fully diluted valuation in USD.',
-    value: field('fdv'),
-    format: f.usd,
-  },
-  {
-    key: 'mcapRank',
-    group: 'Capitalisation',
-    label: 'Rank',
-    unit: 'num',
-    def: false,
-    title: 'Market-cap rank among all coins.',
-    value: field('mcapRank'),
-    format: f.rank,
-  },
-  {
-    key: 'volMcap',
-    group: 'Capitalisation',
-    label: 'Vol/Mcap',
-    unit: 'pct',
-    def: false,
-    title: 'Volume 24h as a share of market cap: how much of the cap turns over per day.',
-    value: field('volMcap'),
-    format: (v) => f.pct(v, 1, false),
-  },
-  {
-    key: 'oiMcap',
-    group: 'Capitalisation',
-    label: 'OI/Mcap',
-    unit: 'pct',
-    def: false,
-    title: 'Open interest as a share of market cap: leverage sitting on the coin.',
-    value: field('oiMcap'),
-    format: (v) => f.pct(v, 1, false),
-  },
-  {
-    key: 'oiDP',
-    group: 'Open interest',
-    label: (ctx) => `OI Δ ${ctx.period}`,
-    unit: 'pct',
-    signed: true,
-    def: true,
-    title:
-      'Change of open interest over the selected period. Read together with price change: up and up is new longs, down and up is a short squeeze.',
-    value: perPeriod('oiD'),
-    format: (v) => f.pct(v),
-  },
-  {
-    key: 'oiD1d',
-    group: 'Open interest',
-    label: 'OI Δ 1D',
-    unit: 'pct',
-    signed: true,
-    def: true,
-    title: 'Change of open interest over the last 24 hours, independent of the period switch.',
-    value: (row) => row.oiD?.['24h'] ?? null,
-    format: (v) => f.pct(v),
-  },
-  {
-    key: 'oiVol',
-    group: 'Open interest',
-    label: 'OI / Vol',
-    unit: 'x',
-    def: false,
-    title: 'Open interest divided by 24h volume. High values mean positions are large against turnover.',
-    value: field('oiVol'),
-    format: f.multiple,
-  },
-  {
-    key: 'funding',
-    group: 'Funding',
+  // Drawn by PriceCell: the digits run to the new value on a live tick.
+  mark: { label: 'Price', end: true, price: true, width: 118, title: 'Last price on the busiest of the selected exchanges, in USD', value: (row) => row.mark },
+  chg1h: pctCol('Chg 1h', per('chg', '1h'), { quick: MOVE_3, title: 'Price change over the last 60 minutes' }),
+  chg4h: pctCol('Chg 4h', per('chg', '4h'), { quick: MOVE_3, title: 'Price change over the last 4 hours' }),
+  chg24: pctCol('Chg 24h', per('chg', '24h'), { quick: MOVE_3, title: 'Price change over 24 hours on the busiest of the selected exchanges' }),
+  chg7d: pctCol('Chg 7D', (row) => row.chg7d, { quick: MOVE_10 }),
+  chg30d: pctCol('Chg 30D', (row) => row.chg30d, { quick: MOVE_10 }),
+  vol24: usdCol('Vol 24h', (row) => row.vol24, [['>=', 20e6], ['>=', 100e6]], 'Traded over 24 hours on the selected exchanges together, in USD'),
+  volx1h: xCol('Vol × 1h', per('volx', '1h'), BUSY, 'Volume of the last 60 minutes against the usual hour of the last 7 days'),
+  volx4h: xCol('Vol × 4h', per('volx', '4h'), BUSY, 'Volume of the last 4 hours against the usual 4 hours of the last 7 days'),
+  volx7: xCol('Vol × 7D', (row) => row.volx7, BUSY, 'Volume of the day against its 7-day average'),
+  oi: usdCol('OI', (row) => row.oi, [['>=', 10e6], ['>=', 50e6]], 'Open interest on the selected exchanges together, in USD'),
+  oiD1h: pctCol('OI Δ 1h', per('oiD', '1h'), { quick: MOVE_3 }),
+  oiD4h: pctCol('OI Δ 4h', per('oiD', '4h'), { quick: MOVE_3 }),
+  oiD24h: pctCol('OI Δ 24h', per('oiD', '24h'), { quick: MOVE_3 }),
+  oiMcap: pctCol('OI/Mcap', (row) => row.oiMcap, { digits: 1, signed: false }),
+  funding: {
     label: 'Funding',
+    end: true,
     unit: 'pct',
-    signed: true,
-    def: true,
-    title: 'Current funding rate per interval. Positive: longs pay shorts.',
-    value: field('funding'),
-    format: f.funding,
+    title: 'Funding rate per 8 hours, weighted by open interest across the selected exchanges',
+    quick: [['>=', 0.0003], ['<=', -0.0003]],
+    value: (row) => row.funding,
+    cell: (row) => fundingCell(row.funding),
   },
-  {
-    key: 'fundingAnn',
-    group: 'Funding',
-    label: 'Funding APR',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: "Current funding rate annualised with the instrument's funding interval.",
-    value: field('fundingAnn'),
-    format: (v) => f.pct(v, 1),
-  },
-  {
-    key: 'fundingNext',
-    group: 'Funding',
-    label: 'Next',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: 'Predicted next funding rate.',
-    value: field('fundingNext'),
-    format: f.funding,
-  },
-  {
-    key: 'atr',
-    group: 'Volatility',
-    label: 'ATR %',
-    unit: 'pct',
-    def: true,
-    title: 'ATR 14 on 1H bars as a share of the last price. The normal hourly step of price, a stop size.',
-    value: field('atr'),
-    format: (v) => f.pct(v, 2, false),
-  },
-  {
-    key: 'rv24',
-    group: 'Volatility',
-    label: 'RV 24h',
-    unit: 'pct',
-    def: false,
-    title: 'Realised volatility: annualised standard deviation of the last 24 hourly log returns.',
-    value: field('rv24'),
-    format: (v) => f.pct(v, 0, false),
-  },
-  {
-    key: 'regime',
-    group: 'Volatility',
-    label: 'Vol regime',
-    unit: 'x',
-    def: true,
-    title:
-      'True range of the last 24 hours against the median daily true range of the last 20 days. Below 0.6 is a squeeze, above 1.6 an expansion.',
-    value: field('regime'),
-    format: f.regime,
-  },
-  {
-    key: 'range1d',
-    group: 'Volatility',
-    label: 'Range 1D',
-    unit: 'pct',
-    def: false,
-    title: "Today's high minus low as a share of the low.",
-    value: field('range1d'),
-    format: (v) => f.pct(v, 1, false),
-  },
-  {
-    key: 'toHigh',
-    group: 'Volatility',
-    label: 'To High',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: 'Last price against the 30-day high. Negative: below the high by this much.',
-    value: field('toHigh'),
-    format: (v) => f.pct(v, 1),
-  },
-  {
-    key: 'toLow',
-    group: 'Volatility',
-    label: 'To Low',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: 'Last price against the 30-day low. Positive: above the low by this much.',
-    value: field('toLow'),
-    format: (v) => f.pct(v, 1),
-  },
-  {
-    key: 'takerP',
-    group: 'Flow',
-    label: (ctx) => `Taker buy ${ctx.period}`,
-    unit: 'pct',
-    def: true,
-    start: true,
-    title:
-      'Share of taker (market) volume that bought over the selected period. Filled by the trade stream, phase 2.',
-    value: perPeriod('takerBuy'),
-    format: f.share,
-  },
-  {
-    key: 'deltaP',
-    group: 'Flow',
-    label: (ctx) => `Delta ${ctx.period}`,
-    unit: 'pct',
-    signed: true,
-    def: true,
-    title:
-      'Taker buy minus taker sell over the period, as a share of period volume. Net aggressive pressure. Filled by the trade stream, phase 2.',
-    value: perPeriod('delta'),
-    format: (v) => f.pct(v, 0),
-  },
-  {
-    key: 'diverg',
-    group: 'Flow',
-    label: 'Divergence',
-    unit: 'num',
-    signed: true,
-    def: false,
-    start: true,
-    title:
-      'Price and delta disagree over the period: price up with net selling, or price down with net buying.',
-    value: divergence,
-    format: f.divergence,
-  },
-  {
-    key: 'vsBtcP',
-    group: 'Strength vs BTC',
-    label: (ctx) => `vs ${ctx.benchmark} ${ctx.period}`,
-    unit: 'pct',
-    signed: true,
-    def: true,
-    title: 'Instrument change minus benchmark change over the period, in percentage points.',
-    value: perPeriod('vsBtc'),
-    format: (v) => f.pct(v),
-  },
-  {
-    key: 'beta',
-    group: 'Strength vs BTC',
-    label: 'Beta',
-    unit: 'num',
-    def: true,
-    title:
-      'Regression slope of hourly log returns on the benchmark over 168 bars. On a 1% benchmark move the instrument moves beta percent.',
-    value: field('beta'),
-    format: (v) => f.number(v, 2),
-  },
-  {
-    key: 'alpha',
-    group: 'Strength vs BTC',
-    label: 'Alpha 7D',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: 'Mean hourly excess return over beta times the benchmark, in percentage points.',
-    value: field('alpha'),
-    format: (v) => f.pct(v, 3),
-  },
-  {
-    key: 'presence',
-    group: 'Strength vs BTC',
-    label: 'Presence',
-    unit: 'pct',
-    def: true,
-    title: 'Share of hours the instrument beat the benchmark. 50% is noise.',
-    value: field('presence'),
-    format: (v) => f.pct(v, 0, false),
-  },
-  {
-    key: 'stay',
-    group: 'Strength vs BTC',
-    label: 'Stay',
-    unit: 'pct',
-    def: false,
-    title:
-      'Probability of beating the benchmark next hour given it beat this hour. Persistence of strength.',
-    value: field('stay'),
-    format: (v) => f.pct(v, 0, false),
-  },
-  {
-    key: 'corr',
-    group: 'Strength vs BTC',
-    label: 'Corr 7D',
-    unit: 'num',
-    def: false,
-    title: 'Pearson correlation of hourly log returns with the benchmark over 168 bars.',
-    value: field('corr'),
-    format: (v) => f.number(v, 2),
-  },
-  level('do', 'DO', true, "Distance from last to today's UTC daily open."),
-  level('wo', 'WO', true, 'Distance from last to the open of the current ISO week, Monday 00:00 UTC.'),
-  level('mo', 'MO', true, 'Distance from last to the open of the current month, UTC.'),
-  level('ma50', 'MA 50', true, 'Distance from last to the 50-day simple moving average of daily closes, forming day included.'),
-  level('ma100', 'MA 100', false, 'Distance from last to the 100-day simple moving average of daily closes, forming day included.'),
-  level('ma200', 'MA 200', true, 'Distance from last to the 200-day simple moving average of daily closes, forming day included.'),
-  {
-    key: 'depth01',
-    group: 'Order book',
-    label: 'Depth 0.1%',
-    unit: 'usd',
-    def: true,
-    title:
-      'Resting notional within 0.1% of mid, both sides, in USD. What a market order of that size would walk through.',
-    value: field('depth01'),
-    format: f.usd,
-  },
-  {
-    key: 'depth05',
-    group: 'Order book',
-    label: 'Depth 0.5%',
-    unit: 'usd',
-    def: false,
-    title: 'Resting notional within 0.5% of mid, both sides, in USD.',
-    value: field('depth05'),
-    format: f.usd,
-  },
-  {
-    key: 'depth1',
-    group: 'Order book',
-    label: 'Depth 1%',
-    unit: 'usd',
-    def: false,
-    title: 'Resting notional within 1% of mid, both sides, in USD.',
-    value: field('depth1'),
-    format: f.usd,
-  },
-  {
-    key: 'imb',
-    group: 'Order book',
-    label: 'Imbalance',
-    unit: 'pct',
-    signed: true,
-    def: false,
-    title: 'Bids minus asks over bids plus asks within 0.5%. Positive: more resting buy liquidity.',
-    value: field('imb'),
-    format: (v) => f.pct(v, 0),
-  },
-  {
-    key: 'spread',
-    group: 'Order book',
-    label: 'Spread',
-    unit: 'bps',
-    def: true,
-    title: 'Best ask minus best bid in basis points of mid.',
-    value: field('spread'),
-    format: f.bps,
-  },
-  {
-    key: 'lev',
-    group: 'Listing',
-    label: 'Max lev',
-    unit: 'num',
-    def: false,
-    title: 'Maximum leverage the venue allows.',
-    value: field('lev'),
-    format: f.leverage,
-  },
-  {
-    key: 'listed',
-    group: 'Listing',
+  fundingAnn: pctCol('Funding APR', (row) => row.fundingAnn, { digits: 1, quick: [['>=', 0.3], ['<=', -0.1]] }),
+  mcap: usdCol('Mcap', (row) => row.mcap, [['>=', 1e9], ['<=', 3e8]], 'Market capitalisation in USD, crypto only'),
+  mcapRank: { label: 'Rank', end: true, value: (row) => row.mcapRank, cell: (row) => (isNum(row.mcapRank) ? { text: '#' + row.mcapRank, tone: '' } : null) },
+  atr: pctCol('ATR %', (row) => row.atr, { signed: false }),
+  regime: xCol('Vol regime', (row) => row.regime, [['<=', 0.7], ['>=', 1.6]], 'Range of the last 24 hours against its 20-day norm'),
+  taker1h: pctCol('Taker buy 1h', per('takerBuy', '1h'), { digits: 0, signed: false, quick: TAKER }),
+  taker4h: pctCol('Taker buy 4h', per('takerBuy', '4h'), { digits: 0, signed: false, quick: TAKER }),
+  taker24h: pctCol('Taker buy 24h', per('takerBuy', '24h'), { digits: 0, signed: false, quick: TAKER }),
+  delta1h: pctCol('Delta 1h', per('delta', '1h'), { digits: 1, quick: DELTA }),
+  delta4h: pctCol('Delta 4h', per('delta', '4h'), { digits: 1, quick: DELTA }),
+  delta24h: pctCol('Delta 24h', per('delta', '24h'), { digits: 1, quick: DELTA }),
+  tape: numCol('Tape /min', (row) => row.tape, 0),
+  vs1h: pctCol('vs BTC 1h', per('vsBtc', '1h'), { quick: VS_BTC }),
+  vs4h: pctCol('vs BTC 4h', per('vsBtc', '4h'), { quick: VS_BTC }),
+  vs24h: pctCol('vs BTC 24h', per('vsBtc', '24h'), { quick: VS_BTC, title: "Price change over 24 hours minus BTC's" }),
+  beta: numCol('Beta', (row) => row.beta, 2),
+  corr: numCol('Corr', (row) => row.corr, 2),
+  spread: { label: 'Spread', end: true, unit: 'bps', quick: [['<=', 3]], value: (row) => row.spread, cell: (row) => plainCell(row.spread, 1, ' bps') },
+  depth05: usdCol('Depth ±0.5%', (row) => row.depth05, [['>=', 1e6]]),
+  venues: {
     label: 'Listed',
-    unit: 'days',
-    def: false,
-    title: 'Days since listing.',
-    value: field('listed'),
-    format: f.days,
+    end: true,
+    title: 'On how many of the selected exchanges the asset trades',
+    quick: [['<=', 1, 'One exchange'], ['>=', 3, 'All three']],
+    value: (row) => row.venues.length,
+    cell: (row) => ({ text: String(row.venues.length), tone: '' }),
   },
-  {
-    key: 'actions',
-    group: 'Instrument',
-    label: '',
-    pin: 'right',
-    def: true,
-    width: 36,
-    title: '',
+  fGap: {
+    label: 'Funding gap',
+    end: true,
+    unit: 'pct',
+    title: 'Widest difference in the 8-hour funding rate between the selected exchanges',
+    quick: [['>=', 0.0001], ['>=', 0.0005]],
+    value: (row) => row.fGap,
+    cell: (row) => (isNum(row.fGap) ? { text: (row.fGap * 100).toFixed(4) + '%', tone: '' } : null),
   },
+  pxGap: {
+    label: 'Price gap',
+    end: true,
+    unit: 'bps',
+    title: 'Widest price difference between the selected exchanges, in basis points',
+    quick: [['>=', 10], ['>=', 30]],
+    value: (row) => row.pxGap,
+    cell: (row) => plainCell(row.pxGap, 1, ' bps'),
+  },
+}
+
+for (const [key, label] of LEVELS) {
+  COLUMNS[key] = {
+    label,
+    end: true,
+    level: true,
+    title: LEVEL_TITLE[key],
+    value: (row) => (row.lv[key] ? row.lv[key].dist : null),
+    cell: (row) => levelCell(row.lv[key]),
+  }
+}
+
+// Each exchange as its own column. A figure of an exchange that is switched off is empty.
+const block = (row, code) => (row.venues.includes(code) ? row.byVenue[code] : null)
+for (const [code, name] of EXCHANGES) {
+  COLUMNS['vol_' + code] = usdCol('Vol ' + name, (row) => block(row, code)?.vol ?? null, [['>=', 20e6], ['>=', 100e6]], `Traded over 24 hours on ${name}, in USD`)
+  COLUMNS['oi_' + code] = usdCol('OI ' + name, (row) => block(row, code)?.oi ?? null, [['>=', 10e6], ['>=', 50e6]], `Open interest on ${name}, in USD`)
+  COLUMNS['f_' + code] = {
+    label: 'Funding ' + name,
+    end: true,
+    unit: 'pct',
+    title: `Funding rate on ${name}, brought to 8 hours`,
+    quick: [['>=', 0.0003], ['<=', -0.0003]],
+    value: (row) => (isNum(row.f8[code]) ? row.f8[code] : null),
+    cell: (row) => fundingCell(row.f8[code]),
+  }
+}
+
+export const DEFAULT_COLUMN_KEYS = ['symbol', 'mark', 'chg24', 'vol24', 'oi', 'funding']
+
+/** Any column of the table can carry a condition: numbers, levels, the sector. */
+export function isFilterable(key) {
+  const column = COLUMNS[key]
+  if (!column || key === 'symbol') return false
+  return Boolean(column.level || key === 'sector' || (column.value && !column.text))
+}
+
+// The hover card of a summed cell: the same figure on each exchange that went into it.
+export const VENUE_FIGURES = {
+  mark: (x) => (isNum(x.p) ? '$' + priceText(x.p) : '—'),
+  chg24: (x) => (isNum(x.c) ? (x.c > 0 ? '+' : '') + (x.c * 100).toFixed(2) + '%' : '—'),
+  vol24: (x) => (isNum(x.vol) ? usdText(x.vol) : '—'),
+  oi: (x) => (isNum(x.oi) ? usdText(x.oi) : '—'),
+  funding: (x) => (isNum(x.f) ? fundingText((x.f * 8) / (x.fi || 8)) : '—'),
+}
+/** Price and change are taken from one exchange, the rest add up. */
+export const VENUE_LEAD_COLUMNS = new Set(['mark', 'chg24'])
+
+// The catalogue a newcomer reads: what the metric is in one line; periods are chips of one family.
+const P3 = (prefix) => [[prefix + '1h', '1h'], [prefix + '4h', '4h'], [prefix + '24h', '24h']]
+export const CATALOG = [
+  { group: 'Price', items: [
+    { name: 'Price', desc: 'Last price in USD', keys: [['mark', '']] },
+    { name: 'Change', desc: 'Price change over the period', keys: [['chg1h', '1h'], ['chg4h', '4h'], ['chg24', '24h'], ['chg7d', '7D'], ['chg30d', '30D']] },
+  ] },
+  { group: 'Volume', items: [
+    { name: 'Volume 24h', desc: 'Traded over the last day on the selected exchanges, in USD', keys: [['vol24', '']] },
+    { name: 'Volume vs usual', desc: 'Against its 7-day norm: 2× is twice the usual', keys: [['volx1h', '1h'], ['volx4h', '4h'], ['volx7', '24h']] },
+  ] },
+  { group: 'Open interest', items: [
+    { name: 'Open interest', desc: 'Open positions on the selected exchanges, in USD', keys: [['oi', '']] },
+    { name: 'OI change', desc: 'Positions opened or closed over the period', keys: P3('oiD') },
+    { name: 'OI to market cap', desc: 'How much leverage sits on the coin', keys: [['oiMcap', '']] },
+  ] },
+  { group: 'Funding', items: [
+    { name: 'Funding rate', desc: 'What longs pay shorts, brought to 8 hours', keys: [['funding', '']] },
+    { name: 'Funding APR', desc: 'The same rate as a yearly percentage', keys: [['fundingAnn', '']] },
+  ] },
+  { group: 'By exchange', items: [
+    { name: 'Listings', desc: 'On how many of the selected exchanges it trades', keys: [['venues', '']] },
+    { name: 'Volume by exchange', desc: 'Where the asset actually trades', keys: EXCHANGES.map(([code, name]) => ['vol_' + code, name]) },
+    { name: 'Open interest by exchange', desc: 'Where the positions sit', keys: EXCHANGES.map(([code, name]) => ['oi_' + code, name]) },
+    { name: 'Funding by exchange', desc: 'Rate per 8 hours on each one and the gap between them', keys: [...EXCHANGES.map(([code, name]) => ['f_' + code, name]), ['fGap', 'Gap']] },
+    { name: 'Price gap', desc: 'Widest price difference between exchanges, in basis points', keys: [['pxGap', '']] },
+  ] },
+  { group: 'Asset', items: [
+    { name: 'Sector', desc: 'Crypto sector, or the class for stocks and commodities', keys: [['sector', '']] },
+    { name: 'Market cap', desc: 'Capitalisation in USD and its rank, crypto only', keys: [['mcap', 'Value'], ['mcapRank', 'Rank']] },
+  ] },
+  { group: 'Levels', items: [
+    { name: 'Opens', desc: 'Open of the day, week, month and the distance to it', keys: [['do', 'Day'], ['wo', 'Week'], ['mo', 'Month']] },
+    { name: 'Daily moving averages', desc: 'The average and the distance to it', keys: [['ma50', '50'], ['ma100', '100'], ['ma200', '200']] },
+  ] },
+  { group: 'Volatility', items: [
+    { name: 'ATR', desc: 'Typical hourly move as a share of price', keys: [['atr', '']] },
+    { name: 'Volatility regime', desc: 'Range of the last 24 hours against its norm: below 0.7 is a squeeze', keys: [['regime', '']] },
+  ] },
+  { group: 'Flow', items: [
+    { name: 'Taker buy share', desc: 'Share of volume bought at market', keys: P3('taker') },
+    { name: 'Delta', desc: 'Market buying minus market selling', keys: P3('delta') },
+    { name: 'Tape speed', desc: 'Market orders per minute', keys: [['tape', '']] },
+  ] },
+  { group: 'Against BTC', items: [
+    { name: 'Ahead or behind BTC', desc: "Price change minus BTC's over the period", keys: P3('vs') },
+    { name: 'Beta and correlation', desc: 'How strongly it follows BTC', keys: [['beta', 'Beta'], ['corr', 'Corr']] },
+  ] },
+  { group: 'Order book', items: [
+    { name: 'Spread', desc: 'Gap between best bid and ask, in basis points', keys: [['spread', '']] },
+    { name: 'Depth', desc: 'Resting orders within ±0.5% of price', keys: [['depth05', '']] },
+  ] },
 ]
-
-/** Symbol and actions are always drawn; the column picker never lists them. */
-export const FIXED_COLUMN_KEYS = ['symbol', 'actions']
-
-export const NUMERIC_COLUMNS = COLUMNS.filter((column) => column.value)
-
-export const DEFAULT_COLUMN_KEYS = COLUMNS.filter((column) => column.def).map(
-  (column) => column.key,
-)
-
-const byKey = new Map(COLUMNS.map((column) => [column.key, column]))
-
-export function findColumn(key) {
-  return byKey.get(key) ?? null
-}
-
-export function columnLabel(column, ctx) {
-  return typeof column.label === 'function' ? column.label(ctx) : column.label
-}
-
-/** Numeric cells are right-aligned unless the column asks for the start. */
-export function isEndAligned(column) {
-  return Boolean(column.value) && !column.start
-}
-
-/** The number a sort or filter reads for this row, or null when unavailable. */
-export function readValue(column, row, ctx) {
-  const value = column.value?.(row, ctx)
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}

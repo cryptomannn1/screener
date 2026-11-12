@@ -92,3 +92,10 @@
 /* Text column (sector / asset class): a label, muted when it is only the class. */
 .scr-text { white-space: nowrap; }
 .scr-text.-mid { color: var(--text-mid-emphasis); }
+
+/* While a column is dragged (header or the Columns list). */
+body.scr-dragging,
+body.scr-dragging * {
+  cursor: grabbing !important;
+  user-select: none;
+}

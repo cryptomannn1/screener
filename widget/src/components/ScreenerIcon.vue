@@ -16,6 +16,7 @@ const ICONS = {
   check: `<path d="M3 8.5l3 3 7-7" ${STROKE}/>`,
   up: `<path d="M4 10l4-4 4 4" ${STROKE}/>`,
   down: `<path d="M4 6l4 4 4-4" ${STROKE}/>`,
+  near: `<path d="M2.5 8h11M5.5 3.5 8 6l2.5-2.5M5.5 12.5 8 10l2.5 2.5" ${STROKE}/>`,
   grip: '<path fill="currentColor" d="M2 3h12v1.5H2zM2 7.25h12v1.5H2zM2 11.5h12V13H2z"/>',
   theme: '<circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 2.5v11A5.5 5.5 0 0 0 8 2.5z" fill="currentColor"/>',
   maximize: `<path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9 7M2.5 13.5 7 9" ${STROKE}/>`,
