@@ -11,8 +11,10 @@ public.
 - UI contract: the prototype in [`prototype/`](prototype/), one HTML page with
   a clean table over the three exchanges, filter phrases and ready tabs.
 - Wire contract: [`api/screener.md`](api/screener.md).
-- Vue widget for the terminal: [`widget/`](widget/), a port of the prototype
-  with a sandbox on :5190 (`make widget`).
+- Vue component for the screener page of the terminal: [`widget/`](widget/),
+  a port of the prototype with a sandbox on :5190 (`make widget`). In the
+  terminal the screener is a page of its own, not a workspace widget; the
+  folder keeps its first name.
 - Where the project stands and what comes next: [`PLAN.md`](PLAN.md) (in Russian).
 
 Quick start: `go run ./cmd/screener -static prototype`, then open
@@ -144,7 +146,7 @@ Done: WebSocket feed for price / mark / index / OI / funding / trades with a
 1-second recompute, REST safety net, candles, books, levels (day / week /
 month open, daily MA 50 / 100 / 200), SSE push, ClickHouse store with restart
 seeding, REST + SSE API, static `/ui/`.
-See `widget/` for the Vue widget and `cmd/backfill` + `cmd/backtest` for the
+See `widget/` for the Vue component and `cmd/backfill` + `cmd/backtest` for the
 strength-vs-BTC study.
 Three exchanges: `GET /assets` gives one row per asset over OKX, Binance and
 Bybit with a block per exchange (price, 24 h change, volume, open interest,
@@ -162,14 +164,14 @@ Next:
    metrics exist for the assets OKX does not list; store the two exchanges' data in ClickHouse (now in memory).
 4. Auth / rate limiting in front of the API for a shared dev host.
 
-## Widget
+## Vue component
 
-`widget/` is the Vue 3 widget for the terminal (Vue only, terminal token
+`widget/` is the Vue 3 component of the terminal's screener page (Vue only, terminal token
 names, no borders between rows) with a Vite sandbox on :5190 (`make widget`,
 or `cd widget/sandbox && npm run dev`). It shows the three exchanges in one
 table: it reads `/assets`, listens to `/stream?view=assets` (SSE) and falls
 back to polling; `?server=` overrides the base URL, `?sse=0` forces polling.
-`widget/HANDOVER.md` is the mounting guide for the terminal team.
+`widget/HANDOVER.md` tells the terminal team how to mount it as a page.
 
 ## Backfill and backtest
 

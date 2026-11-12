@@ -2,7 +2,7 @@
 
 `screener-v2.html` is the screener as one self-contained page: a clean table
 with one row per asset over OKX, Binance and Bybit. It is the UI contract for
-the terminal widget.
+the screener page of the terminal.
 
 - Opened as a file it shows the data snapshot built into it.
 - Served by the service it goes live:
