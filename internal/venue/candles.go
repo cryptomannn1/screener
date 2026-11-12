@@ -29,14 +29,17 @@ func (s *Service) candleTargets() []candleTarget {
 		class, _ := okxClass(string(rows[i].Class), rows[i].Symbol)
 		onOKX[Key(class, rows[i].Symbol)] = true
 	}
+	s.mu.RLock()
+	apart := s.apartKeys(rows)
+	s.mu.RUnlock()
 	var out []candleTarget
 	taken := map[string]bool{}
 	var bench *Instrument
 	for _, v := range []string{Bybit, Binance} {
 		for _, in := range s.symbolsByVolume(v) {
 			in := in
-			k := in.Key()
-			if bench == nil && k == "c:BTC" && in.Quote == "USDT" {
+			k := keyIn(apart, in)
+			if bench == nil && in.Key() == "c:BTC" && in.Quote == "USDT" {
 				bench = &in
 			}
 			if onOKX[k] || taken[k] {
@@ -45,7 +48,7 @@ func (s *Service) candleTargets() []candleTarget {
 			taken[k] = true
 			s.mu.RLock()
 			if se := s.series[k]; se != nil {
-				if cur, ok := s.inst[se.inst.Venue][se.inst.Symbol]; ok && cur.Key() == k {
+				if cur, ok := s.inst[se.inst.Venue][se.inst.Symbol]; ok && keyIn(apart, cur) == k {
 					in = se.inst
 				}
 			}

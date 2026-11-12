@@ -91,7 +91,7 @@ func SplitMult(base string) (string, float64) {
 
 // tradfiAlias maps the names one exchange uses for a stock or a commodity to
 // the ticker the others use.
-var tradfiAlias = map[string]string{"COPPER": "XCU", "NATGAS": "NG", "PAYP": "PYPL"}
+var tradfiAlias = map[string]string{"COPPER": "XCU", "NATGAS": "NG"}
 
 // Canonical brings an exchange's base ticker to the common one and returns the
 // contract multiplier. Coins lose the multiplier prefix; stocks and

@@ -55,6 +55,102 @@ type assetAcc struct {
 	tags      []string
 	blocks    map[string]*blockAcc
 	okx       *collector.Row // OKX's busiest contract of the asset
+	apart     string         // set on a row split off by price: the exchange that leads it
+}
+
+// apartGap is how far an exchange's price may stand from the others before its
+// contract counts as another asset under the same ticker.
+const apartGap = 0.15
+
+var venueName = map[string]string{OKX: "OKX", Binance: "Binance", Bybit: "Bybit"}
+
+// apartKeys finds the contracts that share a ticker with the other exchanges
+// but not the price: a different paper (two companies, one ticker) or the same
+// one quoted in another unit (pre-IPO contracts). Summing such contracts into
+// one row mixes prices that cannot be compared, so they go under a key of their
+// own, `<key>@<exchange>`. OKX keeps the plain key where it lists the asset,
+// else the busiest exchange does; exchanges that agree with each other stay
+// together. The result maps exchange + "|" + key to the key to use. The caller
+// holds s.mu.
+func (s *Service) apartKeys(rows []collector.Row) map[string]string {
+	type quote struct {
+		venue  string
+		p, vol float64
+	}
+	quotes := map[string]map[string]quote{} // key -> exchange -> its busiest contract
+	put := func(key, venue string, p, vol float64) {
+		if !(p > 0) {
+			return
+		}
+		if !(vol > 0) {
+			vol = 0
+		}
+		m := quotes[key]
+		if m == nil {
+			m = map[string]quote{}
+			quotes[key] = m
+		}
+		if q, ok := m[venue]; !ok || vol > q.vol {
+			m[venue] = quote{venue, p, vol}
+		}
+	}
+	for i := range rows {
+		class, _ := okxClass(string(rows[i].Class), rows[i].Symbol)
+		put(Key(class, rows[i].Symbol), OKX, float64(rows[i].Last), float64(rows[i].Vol24))
+	}
+	for _, v := range []string{Binance, Bybit} {
+		for sym, in := range s.inst[v] {
+			if t, ok := s.tick[v][sym]; ok {
+				put(in.Key(), v, t.Last/in.Mult, t.Vol24)
+			}
+		}
+	}
+	out := map[string]string{}
+	for key, m := range quotes {
+		if len(m) < 2 {
+			continue
+		}
+		list := make([]quote, 0, len(m))
+		for _, q := range m {
+			list = append(list, q)
+		}
+		sort.Slice(list, func(i, j int) bool {
+			if a, b := list[i].venue == OKX, list[j].venue == OKX; a != b {
+				return a
+			}
+			if list[i].vol != list[j].vol {
+				return list[i].vol > list[j].vol
+			}
+			return list[i].venue < list[j].venue
+		})
+		leads := []quote{list[0]}
+		for _, q := range list[1:] {
+			home := -1
+			for i, l := range leads {
+				if math.Abs(q.p/l.p-1) <= apartGap {
+					home = i
+					break
+				}
+			}
+			if home < 0 {
+				leads = append(leads, q)
+				home = len(leads) - 1
+			}
+			if home > 0 {
+				out[q.venue+"|"+key] = key + "@" + leads[home].venue
+			}
+		}
+	}
+	return out
+}
+
+// keyIn is the asset key of an instrument, with the split by price applied.
+func keyIn(apart map[string]string, in Instrument) string {
+	k := in.Key()
+	if ak, ok := apart[in.Venue+"|"+k]; ok {
+		return ak
+	}
+	return k
 }
 
 func (a *assetAcc) blk(venue string) *blockAcc {
@@ -89,8 +185,8 @@ func (s *Service) build(now time.Time) []Asset {
 	defer s.mu.RUnlock()
 
 	accs := map[string]*assetAcc{}
-	get := func(class, kind, base string, tags []string) *assetAcc {
-		k := Key(class, base)
+	apart := s.apartKeys(rows)
+	get := func(k, class, kind, base string, tags []string) *assetAcc {
 		a := accs[k]
 		if a == nil {
 			a = &assetAcc{key: k, base: base, classes: map[string]bool{}, kinds: map[string]bool{}, blocks: map[string]*blockAcc{}}
@@ -107,7 +203,7 @@ func (s *Service) build(now time.Time) []Asset {
 	for i := range rows {
 		r := &rows[i]
 		class, kind := okxClass(string(r.Class), r.Symbol)
-		a := get(class, kind, r.Symbol, nil)
+		a := get(Key(class, r.Symbol), class, kind, r.Symbol, nil)
 		// The 24 h change is the exchange's own rolling figure, as on Binance and Bybit; the row's chg["24h"] is
 		// measured from an hourly close and can differ by the move inside that hour.
 		chg := float64(r.ChgRoll)
@@ -118,6 +214,14 @@ func (s *Service) build(now time.Time) []Asset {
 		if a.okx == nil || float64(r.Vol24) > float64(a.okx.Vol24) {
 			a.okx = r
 		}
+	}
+	bucket := func(in Instrument, tags []string) *assetAcc {
+		k := keyIn(apart, in)
+		a := get(k, in.Class, in.Kind, in.Base, tags)
+		if k != in.Key() {
+			a.apart = k[len(in.Key())+1:]
+		}
+		return a
 	}
 	for sym, in := range s.inst[Binance] {
 		t, ok := s.tick[Binance][sym]
@@ -135,7 +239,7 @@ func (s *Service) build(now time.Time) []Asset {
 		if r, ok := s.bnOI[sym]; ok {
 			oi = r.contracts * mark // contracts of the listed symbol at its own mark price
 		}
-		get(in.Class, in.Kind, in.Base, in.Tags).blk(Binance).add(t.Last/in.Mult, t.Chg24, t.Vol24, oi, fr, in.FundingH)
+		bucket(in, in.Tags).blk(Binance).add(t.Last/in.Mult, t.Chg24, t.Vol24, oi, fr, in.FundingH)
 	}
 	for sym, in := range s.inst[Bybit] {
 		t, ok := s.tick[Bybit][sym]
@@ -146,7 +250,7 @@ func (s *Service) build(now time.Time) []Asset {
 		if !(fi > 0) {
 			fi = in.FundingH
 		}
-		get(in.Class, in.Kind, in.Base, nil).blk(Bybit).add(t.Last/in.Mult, t.Chg24, t.Vol24, t.OIUsd, t.Funding, fi)
+		bucket(in, nil).blk(Bybit).add(t.Last/in.Mult, t.Chg24, t.Vol24, t.OIUsd, t.Funding, fi)
 	}
 
 	bench := s.series[benchKey]
@@ -177,7 +281,7 @@ func (s *Service) build(now time.Time) []Asset {
 		switch {
 		case a.classes[ClassCrypto]:
 			as.Cls = ClassCrypto
-			if s.meta != nil {
+			if s.meta != nil && a.apart == "" { // a row split off by price is not the coin the metadata describes
 				if m, ok := s.meta.Lookup(a.base); ok {
 					as.N, as.Sec = m.Name, m.Sector
 					if m.Mcap > 0 {
@@ -210,6 +314,9 @@ func (s *Service) build(now time.Time) []Asset {
 			if a.okx != nil {
 				as.N = a.okx.Name
 			}
+		}
+		if a.apart != "" {
+			as.N = venueName[a.apart] + " contract"
 		}
 		if a.okx != nil {
 			as.M = fromRow(a.okx)

@@ -30,7 +30,7 @@ func TestCanonicalAndKey(t *testing.T) {
 		{ClassStock, "AMDSTOCK", "AMD", "t:AMD", 1},    // Bybit's suffix where a coin holds the ticker
 		{ClassCommodity, "NATGAS", "NG", "t:NG", 1},    // Binance's name for OKX's NG
 		{ClassCommodity, "COPPER", "XCU", "t:XCU", 1},  //
-		{ClassStock, "PAYP", "PYPL", "t:PYPL", 1},      //
+		{ClassStock, "PAYP", "PAYP", "t:PAYP", 1},      // not PayPal: another paper, another price
 		{ClassStock, "CAT", "CAT", "t:CAT", 1},         // Caterpillar
 		{ClassCrypto, "1000CAT", "CAT", "c:CAT", 1000}, // Simon's Cat: same ticker, another asset
 		{ClassStock, "1000X", "1000X", "t:1000X", 1},   // multipliers are a coin convention only

@@ -143,8 +143,8 @@ Rows come busiest first (24 h volume over all exchanges).
 
 | field | meaning |
 |-------|---------|
-| `k` | asset id: the common ticker with a class prefix, `c:` for coins and `t:` for everything else. The prefix is part of the identity: the same ticker can be a coin on one exchange and a stock on another (`BB`, `CAT`, `ON`, `QNT`) |
-| `s` | common ticker. Exchange spellings are brought to one form: contract multipliers are stripped (`1000PEPE`, `1000000MOG`, `1MBABYDOGE`, `SHIB1000` → price of one coin), Bybit's `STOCK` suffix is dropped (`AMDSTOCK` → `AMD`), `COPPER` = `XCU`, `NATGAS` = `NG`, `PAYP` = `PYPL` |
+| `k` | asset id: the common ticker with a class prefix, `c:` for coins and `t:` for everything else. The prefix is part of the identity: the same ticker can be a coin on one exchange and a stock on another (`BB`, `CAT`, `ON`, `QNT`). An exchange whose price stands more than 15% away from the others under the same ticker trades something else (another company, or a pre-IPO contract quoted in another unit), so its contracts make a row of their own: `t:ANTHROPIC` for OKX and `t:ANTHROPIC@bn` for Binance. OKX keeps the plain id where it lists the asset, else the busiest exchange does; `n` of the split row names its exchange |
+| `s` | common ticker. Exchange spellings are brought to one form: contract multipliers are stripped (`1000PEPE`, `1000000MOG`, `1MBABYDOGE`, `SHIB1000` → price of one coin), Bybit's `STOCK` suffix is dropped (`AMDSTOCK` → `AMD`), `COPPER` = `XCU`, `NATGAS` = `NG`. Two rows can carry the same ticker, see `k` |
 | `n` | name, when known (coins: from the metadata resolver) |
 | `cls` | `crypto`, `stock` (equities, ETFs, equity indices, pre-IPO), `commodity`, `fx`. From OKX `instCategory`, Binance `underlyingType`, Bybit `symbolType` |
 | `sec` | coins: the resolver's sector, else a sector from Binance's tags, else `Other`; other classes: `Stock`, `ETF`, `Index`, `Pre-IPO`, `Commodity`, `FX` |

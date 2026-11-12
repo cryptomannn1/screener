@@ -247,7 +247,9 @@ func TestAssetsOverThreeExchanges(t *testing.T) {
 			t.Fatalf("%s: one-minute bars not loaded: %d", k, len(se.minute))
 		}
 		want := 2*unit/metrics.PriceAt(se.minute, metrics.MinuteMs, midTime.UnixMilli()-3_600_000) - 1
-		if got := float64(mid[k].M.Chg["1h"]); !near(got, want) || got < 0.05 {
+		// The window is 30 to 90 one-minute bars deep, depending on the minute the test runs at: 3% at the least,
+		// against about 0.1% off the hourly bars.
+		if got := float64(mid[k].M.Chg["1h"]); !near(got, want) || got < 0.02 {
 			t.Errorf("%s chg 1h off the minute bars = %v, want %v", k, got, want)
 		}
 	}
